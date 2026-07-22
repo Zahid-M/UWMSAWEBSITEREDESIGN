@@ -131,6 +131,40 @@ function Muqarnas({ color = GOLD, height = 22, cells = 10, opacity = 0.9 }) {
   );
 }
 
+// Full-section star lattice — a soft, repeating geometric texture for the
+// background of light content sections. Deliberately faint so text stays
+// readable. Sits behind content via absolute positioning + low opacity.
+function StarLatticeBg({ color = PURPLE, opacity = 0.05, unit = 64 }) {
+  const c = unit / 2, outer = unit * 0.5, inner = unit * 0.3;
+  const star = [];
+  for (let i = 0; i < 16; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = (Math.PI / 8) * i - Math.PI / 2;
+    star.push(`${(c + r * Math.cos(a)).toFixed(2)},${(c + r * Math.sin(a)).toFixed(2)}`);
+  }
+  const spokes = [[c, c - outer, c, 0], [c, c + outer, c, unit],
+    [c - outer, c, 0, c], [c + outer, c, unit, c]];
+  const id = "lattice-" + Math.round(unit) + "-" + Math.round(opacity * 1000);
+  return (
+    <div aria-hidden="true" style={{ position: "absolute", inset: 0, opacity,
+      pointerEvents: "none", zIndex: 0 }}>
+      <svg width="100%" height="100%" preserveAspectRatio="xMidYMid slice"
+           style={{ display: "block" }}>
+        <defs>
+          <pattern id={id} width={unit} height={unit} patternUnits="userSpaceOnUse">
+            <g fill="none" stroke={color} strokeWidth="1.1">
+              <polygon points={star.join(" ")} />
+              {spokes.map((s, i) => <line key={i} x1={s[0]} y1={s[1]} x2={s[2]} y2={s[3]} />)}
+            </g>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill={`url(#${id})`} />
+      </svg>
+    </div>
+  );
+}
+
+
 
 const seed = {
   hero: {
@@ -380,15 +414,17 @@ const mobLink = {
   textDecoration: "none",
 };
 
-function Band({ children, id, alt, style, divider }) {
+function Band({ children, id, alt, style, divider, lattice }) {
   return (
-    <section id={id} style={{ padding: "92px 20px", background: alt ? "#fff" : "transparent", ...style }}>
+    <section id={id} style={{ position: "relative", overflow: "hidden",
+      padding: "92px 20px", background: alt ? "#fff" : "transparent", ...style }}>
+      {lattice && <StarLatticeBg color={PURPLE} opacity={alt ? 0.05 : 0.045} unit={66} />}
       {divider && (
-        <div style={{ maxWidth: 1200, margin: "-40px auto 52px", opacity: .55 }}>
+        <div style={{ position: "relative", zIndex: 1, maxWidth: 1200, margin: "-40px auto 52px", opacity: .55 }}>
           <GirihBand color={GOLD} height={30} opacity={1} unit={44} />
         </div>
       )}
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>{children}</div>
+      <div style={{ position: "relative", zIndex: 1, maxWidth: 1200, margin: "0 auto" }}>{children}</div>
     </section>
   );
 }
@@ -455,7 +491,7 @@ function HomeSection({ data, onNav }) {
       </section>
 
       {/* Gallery */}
-      <Band id="gallery">
+      <Band id="gallery" lattice>
         <Eyebrow>Our community</Eyebrow>
         <Title>Moments from the year</Title>
         <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
@@ -611,7 +647,7 @@ function MasjidalWidget({ id, embed }) {
 function PrayerSection({ data }) {
   const t = data.prayerTimes;
   return (
-    <Band id="prayer" alt>
+    <Band id="prayer" alt lattice>
       <Eyebrow>Prayer</Eyebrow>
       <Title>Places & times to pray</Title>
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 24, marginTop: 32,
@@ -689,7 +725,7 @@ function PrayerSection({ data }) {
 /* ---------- EVENTS ---------- */
 function EventsSection({ data }) {
   return (
-    <Band id="events" divider>
+    <Band id="events" divider lattice>
       <Eyebrow>This week</Eyebrow>
       <Title>Weekly calendar</Title>
       <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
@@ -740,7 +776,7 @@ function EventsSection({ data }) {
 /* ---------- PROGRAMS ---------- */
 function ProgramsSection({ data }) {
   return (
-    <Band id="programs" alt divider>
+    <Band id="programs" alt divider lattice>
       <Eyebrow>Get involved</Eyebrow>
       <Title>Our programs</Title>
       <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
@@ -773,7 +809,7 @@ function ConnectSection({ data }) {
     facebook: "#1877F2", donate: `linear-gradient(135deg,${PURPLE},${GOLD})`, link: PURPLE,
   }[k] || PURPLE);
   return (
-    <Band id="connect">
+    <Band id="connect" lattice>
       <Eyebrow>Connect</Eyebrow>
       <Title>Find your people</Title>
       <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
