@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { supabase, loadContent, saveContent } from "./supabase";
 import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
@@ -264,6 +265,34 @@ export default function App() {
   const [active, setActive] = useState("home");
   const [adminOpen, setAdminOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // On load: pull saved content from Supabase (fall back to seed if empty),
+  // and check whether an admin session is already active.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const remote = await loadContent();
+      if (!cancelled && remote) setData({ ...seed, ...remote });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!cancelled) { setIsAdmin(!!session); setLoaded(true); }
+    })();
+    // keep isAdmin in sync if the session changes (login/logout/expiry)
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setIsAdmin(!!session);
+    });
+    return () => { cancelled = true; sub?.subscription?.unsubscribe(); };
+  }, []);
+
+  // Persist the whole content object to Supabase. Used by the admin panel's
+  // Save button. Requires an authenticated session (enforced by RLS).
+  const persist = useCallback(async (next) => {
+    setSaving(true);
+    const res = await saveContent(next);
+    setSaving(false);
+    return res;
+  }, []);
 
   const scrollTo = useCallback((id) => {
     setMenuOpen(false);
@@ -282,7 +311,7 @@ export default function App() {
     );
     ids.forEach((id) => { const el = document.getElementById(id); if (el) obs.observe(el); });
     return () => obs.disconnect();
-  }, []);
+  }, [loaded]);
 
   return (
     <div style={{ fontFamily: "'Poppins', system-ui, sans-serif", color: "#1f1a2e", background: "#faf9fc" }}>
@@ -301,6 +330,7 @@ export default function App() {
         <AdminPanel
           data={data} setData={setData}
           isAdmin={isAdmin} setIsAdmin={setIsAdmin}
+          persist={persist} saving={saving}
           onClose={() => setAdminOpen(false)}
         />
       )}
@@ -872,15 +902,32 @@ function Footer({ onAdmin }) {
 /* ============================================================
    ADMIN
    ============================================================ */
-function AdminPanel({ data, setData, isAdmin, setIsAdmin, onClose }) {
+function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClose }) {
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState("hero");
+  const [savedMsg, setSavedMsg] = useState("");
 
-  const login = () => {
-    // Demo gate only — replace with real auth on a backend.
-    if (pw === "msauw2025") { setIsAdmin(true); setErr(""); }
-    else setErr("Incorrect password. Try again.");
+  const login = async () => {
+    setErr(""); setBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pw });
+    setBusy(false);
+    if (error) setErr(error.message || "Login failed. Check your email and password.");
+    else { setIsAdmin(true); setPw(""); }
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setIsAdmin(false); setEmail(""); setPw("");
+  };
+
+  const save = async () => {
+    setSavedMsg("");
+    const res = await persist(data);
+    if (res.ok) { setSavedMsg("Saved — changes are now live."); setTimeout(() => setSavedMsg(""), 3000); }
+    else setSavedMsg("Save failed: " + res.error);
   };
 
   return (
@@ -908,18 +955,21 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, onClose }) {
         {!isAdmin ? (
           <div style={{ padding: 28 }}>
             <p style={{ margin: "0 0 18px", color: "#5a5468", fontSize: 14.5, lineHeight: 1.6 }}>
-              Enter the admin password to edit events, prayer times, programs, and more.
-              <br /><span style={{ fontSize: 12.5, color: "#9a94a8" }}>Demo password: <b>msauw2025</b></span>
+              Officer login. Sign in to edit events, prayer times, programs, and more.
             </p>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && login()}
+              placeholder="Email" autoComplete="username" style={{ ...inp, marginBottom: 10 }} autoFocus />
             <input type="password" value={pw} onChange={(e) => setPw(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && login()}
-              placeholder="Password" style={inp} autoFocus />
+              placeholder="Password" autoComplete="current-password" style={inp} />
             {err && <div style={{ color: "#c0392b", fontSize: 13.5, marginTop: 10 }}>{err}</div>}
-            <button onClick={login} style={{ ...btnPurple, width: "100%", marginTop: 16 }}>
-              Log in</button>
+            <button onClick={login} disabled={busy}
+              style={{ ...btnPurple, width: "100%", marginTop: 16, opacity: busy ? .6 : 1 }}>
+              {busy ? "Signing in…" : "Log in"}</button>
             <p style={{ margin: "16px 0 0", fontSize: 12, color: "#b0aac0", lineHeight: 1.5 }}>
-              Note: this is a front-end demo gate. Changes last for this browser session only.
-              Connect a backend (e.g. Firebase/Supabase) for real authentication and saved content.
+              Accounts are managed by MSA admins in Supabase. Ask an admin to add you if you
+              need access.
             </p>
           </div>
         ) : (
@@ -937,14 +987,26 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, onClose }) {
                   fontWeight: 600, fontSize: 13.5, cursor: "pointer", marginBottom: 3,
                   fontFamily: "inherit" }}>{lbl}</button>
               ))}
-              <button onClick={() => { setIsAdmin(false); setPw(""); }} style={{ display: "flex",
+              <button onClick={logout} style={{ display: "flex",
                 alignItems: "center", gap: 7, width: "100%", padding: "10px 12px", borderRadius: 9,
                 border: "none", background: "transparent", color: "#c0392b", fontWeight: 600,
                 fontSize: 13.5, cursor: "pointer", marginTop: 12, fontFamily: "inherit" }}>
                 <LogOut size={15} /> Log out</button>
             </div>
-            <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
-              <Editor tab={tab} data={data} setData={setData} />
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                gap: 12, padding: "12px 24px", borderBottom: "1px solid rgba(0,0,0,.08)",
+                background: "#faf9fc", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, color: savedMsg.startsWith("Save failed") ? "#c0392b" : "#5a5468" }}>
+                  {savedMsg || "Edit below, then Save to publish to the live site."}</span>
+                <button onClick={save} disabled={saving}
+                  style={{ ...btnPurple, display: "inline-flex", alignItems: "center", gap: 7,
+                    opacity: saving ? .6 : 1 }}>
+                  <Save size={15} /> {saving ? "Saving…" : "Save changes"}</button>
+              </div>
+              <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
+                <Editor tab={tab} data={data} setData={setData} />
+              </div>
             </div>
           </div>
         )}
