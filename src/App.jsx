@@ -172,7 +172,7 @@ const seed = {
     title: "University of Washington Muslim Student Association",
     mission: "A home away from home for Muslim Huskies — building faith, friendship, and community on Montlake and beyond.",
   },
-  // To use a real photo, add img: "/gallery/your-file.jpg" (file goes in public/gallery/).
+  // To use a real photo, add img: "//your-file.jpg" (file goes in public/gallery/).
   // Without img, the card shows a colored gradient placeholder.
   gallery: [
     { id: 1, caption: "Eid on the Quad", tag: "Eid", img: "" },
@@ -607,7 +607,8 @@ function Gallery({ items }) {
   return (
     <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       {/* featured carousel */}
-      <div style={{ position: "relative", borderRadius: 22, overflow: "hidden", height: 340,
+      <div style={{ position: "relative", borderRadius: 22, overflow: "hidden",
+        aspectRatio: "16 / 9", maxHeight: 560,
         background: grad(i), display: "grid", placeItems: "center", marginBottom: 16 }}>
         {items[i].img && (
           <img src={items[i].img} alt={items[i].caption}
