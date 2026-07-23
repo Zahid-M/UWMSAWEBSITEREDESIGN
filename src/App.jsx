@@ -208,13 +208,13 @@ const seed = {
     //
     // If you instead have the full embed <iframe...> code from the old site,
     // paste it into masjidalEmbed as a string and it will be used as-is.
-    masjidalId: "",       // e.g. "1234"
+    masjidalId: "RKxwXOdO",       // e.g. "1234"
     masjidalEmbed: "",    // OR paste a full <iframe ...></iframe> string
     // ── Manual fallback (used only when both fields above are empty) ──────
-    Fajr: "5:42 AM", Dhuhr: "1:15 PM", Asr: "4:50 PM",
-    Maghrib: "7:38 PM", Isha: "9:05 PM",
-    jummah: "First khutbah 1:00 PM · Second 2:15 PM at Islamic House",
-    announcement: "Ramadan taraweeh begins after Isha — all welcome. Sisters' section on the east side.",
+    // Fajr: "5:42 AM", Dhuhr: "1:15 PM", Asr: "4:50 PM",
+    // Maghrib: "7:38 PM", Isha: "9:05 PM",
+    // jummah: "First khutbah 1:00 PM · Second 2:15 PM at Islamic House",
+    // announcement: "Ramadan taraweeh begins after Isha — all welcome. Sisters' section on the east side.",
   },
   // Any event can take an optional img: "/events/your-file.jpg" (file in public/events/)
   // to show a banner photo at the top of its card. Monday shows the pattern.
