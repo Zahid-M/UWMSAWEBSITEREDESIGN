@@ -658,13 +658,14 @@ function MasjidalWidget({ id, embed }) {
   if (embed) {
     return <div ref={ref} style={{ padding: "12px 16px" }} />;
   }
-  // Masjid ID → standard Masjidal daily-timings iframe.
+  // Masjid ID → Masjidal's daily-timings iframe (served via athanplus.com).
   return (
     <div style={{ padding: "8px 12px" }}>
       <iframe
         title="Masjidal prayer times"
-        src={`https://portal.masjidal.com/widgets/prayer?id=${encodeURIComponent(id)}`}
-        style={{ width: "100%", minHeight: 300, border: "none" }}
+        src={`https://timing.athanplus.com/masjid/widgets/embed?theme=3&masjid_id=${encodeURIComponent(id)}&color=000000`}
+        style={{ width: "100%", minHeight: 500, border: "none" }}
+        allowTransparency="true"
         loading="lazy"
       />
       <div style={{ fontSize: 11, color: "#9a94a8", textAlign: "center", padding: "4px 0 8px" }}>
