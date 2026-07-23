@@ -1061,15 +1061,16 @@ function Editor({ tab, data, setData }) {
     return (
       <ListEditor title="Sponsors" items={data.sponsors}
         onChange={(sponsors) => up({ sponsors })}
-        blank={{ name: "New sponsor" }} fields={[["logo", "Logo", "image"], ["name", "Name"]]} />
+        blank={{ name: "New sponsor", url: "" }}
+        fields={[["logo", "Logo", "image"], ["name", "Name"], ["url", "Website URL (optional)"]]} />
     );
 
   if (tab === "spaces")
     return (
-      <ListEditor title="Sponsors" items={data.sponsors}
-        onChange={(sponsors) => up({ sponsors })}
-        blank={{ name: "New sponsor", url: "" }}
-        fields={[["logo", "Logo", "image"], ["name", "Name"], ["url", "Website URL (optional)"]]} />
+      <ListEditor title="Prayer spaces" items={data.prayerSpaces}
+        onChange={(prayerSpaces) => up({ prayerSpaces })}
+        blank={{ name: "New space", loc: "Location", note: "" }}
+        fields={[["name", "Name"], ["loc", "Location"], ["note", "Note"]]} />
     );
 
   if (tab === "times") {
