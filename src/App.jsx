@@ -208,13 +208,13 @@ const seed = {
     //
     // If you instead have the full embed <iframe...> code from the old site,
     // paste it into masjidalEmbed as a string and it will be used as-is.
-    masjidalId: "",       // e.g. "1234"
+    masjidalId: "RKxwXOdO",       // e.g. "1234"
     masjidalEmbed: "",    // OR paste a full <iframe ...></iframe> string
     // ── Manual fallback (used only when both fields above are empty) ──────
-    Fajr: "5:42 AM", Dhuhr: "1:15 PM", Asr: "4:50 PM",
-    Maghrib: "7:38 PM", Isha: "9:05 PM",
-    jummah: "First khutbah 1:00 PM · Second 2:15 PM at Islamic House",
-    announcement: "Ramadan taraweeh begins after Isha — all welcome. Sisters' section on the east side.",
+    // Fajr: "5:42 AM", Dhuhr: "1:15 PM", Asr: "4:50 PM",
+    // Maghrib: "7:38 PM", Isha: "9:05 PM",
+    // jummah: "First khutbah 1:00 PM · Second 2:15 PM at Islamic House",
+    // announcement: "Ramadan taraweeh begins after Isha — all welcome. Sisters' section on the east side.",
   },
   // Any event can take an optional img: "/events/your-file.jpg" (file in public/events/)
   // to show a banner photo at the top of its card. Monday shows the pattern.
@@ -658,13 +658,14 @@ function MasjidalWidget({ id, embed }) {
   if (embed) {
     return <div ref={ref} style={{ padding: "12px 16px" }} />;
   }
-  // Masjid ID → standard Masjidal daily-timings iframe.
+  // Masjid ID → Masjidal's daily-timings iframe (served via athanplus.com).
   return (
     <div style={{ padding: "8px 12px" }}>
       <iframe
         title="Masjidal prayer times"
-        src={`https://portal.masjidal.com/widgets/prayer?id=${encodeURIComponent(id)}`}
-        style={{ width: "100%", minHeight: 300, border: "none" }}
+        src={`https://timing.athanplus.com/masjid/widgets/embed?theme=3&masjid_id=${encodeURIComponent(id)}&color=000000`}
+        style={{ width: "100%", minHeight: 500, border: "none" }}
+        allowTransparency="true"
         loading="lazy"
       />
       <div style={{ fontSize: 11, color: "#9a94a8", textAlign: "center", padding: "4px 0 8px" }}>
@@ -1060,6 +1061,16 @@ function Editor({ tab, data, setData }) {
     const setT = (patch) => up({ prayerTimes: { ...t, ...patch } });
     return (
       <Section title="Islamic House prayer times">
+        <Field label="Masjidal Masjid ID (leave blank to use manual times below)">
+          <input style={inp} value={t.masjidalId || ""}
+            onChange={(e) => setT({ masjidalId: e.target.value })}
+            placeholder="e.g. RKxwXOdO" />
+        </Field>
+        <Field label="Masjidal full embed code (optional — overrides Masjid ID above if filled in)">
+          <textarea style={{ ...inp, minHeight: 70 }} value={t.masjidalEmbed || ""}
+            onChange={(e) => setT({ masjidalEmbed: e.target.value })}
+            placeholder="<iframe ...></iframe>" />
+        </Field>
         {["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"].map((p) => (
           <Field key={p} label={p}>
             <input style={inp} value={t[p]} onChange={(e) => setT({ [p]: e.target.value })} />
