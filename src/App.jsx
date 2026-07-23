@@ -1061,6 +1061,16 @@ function Editor({ tab, data, setData }) {
     const setT = (patch) => up({ prayerTimes: { ...t, ...patch } });
     return (
       <Section title="Islamic House prayer times">
+        <Field label="Masjidal Masjid ID (leave blank to use manual times below)">
+          <input style={inp} value={t.masjidalId || ""}
+            onChange={(e) => setT({ masjidalId: e.target.value })}
+            placeholder="e.g. RKxwXOdO" />
+        </Field>
+        <Field label="Masjidal full embed code (optional — overrides Masjid ID above if filled in)">
+          <textarea style={{ ...inp, minHeight: 70 }} value={t.masjidalEmbed || ""}
+            onChange={(e) => setT({ masjidalEmbed: e.target.value })}
+            placeholder="<iframe ...></iframe>" />
+        </Field>
         {["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"].map((p) => (
           <Field key={p} label={p}>
             <input style={inp} value={t[p]} onChange={(e) => setT({ [p]: e.target.value })} />
