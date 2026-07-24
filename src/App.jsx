@@ -8,6 +8,7 @@ const QuadTree = React.lazy(() => import("./QuadTree.jsx"));
 // 3D cursor tilt on the medallion, magnetic CTAs. Self-contained — no
 // external files required beyond the animejs package itself.
 import { animate, createTimeline, stagger, utils } from "animejs";
+import ParticleLogo from "./components/ParticleLogo";
 import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
@@ -2108,7 +2109,10 @@ function HomeSection({ data, onNav, curtainDone }) {
         <HeroArch />
         <div ref={stageRef} style={{ maxWidth: 960, margin: "0 auto", position: "relative", zIndex: 2,
           textAlign: "center", paddingBottom: 90 }}>
-          <div className="hero-logo" style={{ opacity: 0 }}><AnimatedLogo /></div>
+          <div className="hero-logo" style={{ opacity: 0, position: "relative",
+            height: 420, maxWidth: 640, margin: "0 auto" }}>
+            <ParticleLogo />
+          </div>
           <div className="hero-kicker" style={{ opacity: 0, display: "inline-flex", alignItems: "center", gap: 8,
             padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
             border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24 }}>
