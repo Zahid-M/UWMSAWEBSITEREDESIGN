@@ -242,6 +242,165 @@ function CherryBlossoms({ count = 16 }) {
   );
 }
 
+/* ── Parallax ───────────────────────────────────────────────────────────
+   Drifts a decorative element as it passes through the viewport. Transform
+   only (no layout thrash), rAF-throttled, off for reduced-motion users. */
+function Parallax({ speed = 0.15, children, style, ...rest }) {
+  const ref = useRef(null);
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0, ticking = false;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const progress = (r.top + r.height / 2 - vh / 2) / vh;
+      setOffset(progress * speed * 100);
+      ticking = false;
+    };
+    const onScroll = () => { if (ticking) return; ticking = true; raf = requestAnimationFrame(update); };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [speed]);
+  return (
+    <div ref={ref} aria-hidden="true" style={{
+      position: "absolute", pointerEvents: "none", zIndex: 0,
+      transform: `translate3d(0, ${offset}px, 0)`, willChange: "transform", ...style,
+    }} {...rest}>{children}</div>
+  );
+}
+
+/* ── Botanical accents ──────────────────────────────────────────────── */
+function Blossom({ size = 18, color = PINK, cx = 0, cy = 0, rot = 0 }) {
+  const petals = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (i * 72 - 90) * (Math.PI / 180);
+    const px = cx + Math.cos(a) * size * 0.28, py = cy + Math.sin(a) * size * 0.28;
+    petals.push(
+      <ellipse key={i} cx={px} cy={py} rx={size * 0.26} ry={size * 0.34}
+        transform={`rotate(${i * 72 + rot} ${px} ${py})`} fill={color} opacity="0.9" />
+    );
+  }
+  return <g>{petals}<circle cx={cx} cy={cy} r={size * 0.11} fill={GOLD} opacity="0.95" /></g>;
+}
+
+function SakuraBranch({ width = 260, flip = false, opacity = 0.9, style }) {
+  return (
+    <svg width={width} height={width * 0.62} viewBox="0 0 260 160" aria-hidden="true"
+      style={{ transform: flip ? "scaleX(-1)" : "none", opacity, display: "block", ...style }}>
+      <path d="M-5 26 C60 34, 96 52, 132 78 C158 96, 190 106, 232 106"
+        stroke="#5a4636" strokeWidth="4" fill="none" strokeLinecap="round" />
+      <path d="M60 33 C74 46, 82 60, 84 76" stroke="#5a4636" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+      <path d="M132 78 C138 62, 150 50, 168 44" stroke="#5a4636" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+      <path d="M186 100 C196 86, 208 78, 224 74" stroke="#5a4636" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+      <Blossom cx={26} cy={28} size={22} color={PINK} rot={10} />
+      <Blossom cx={70} cy={36} size={17} color="#e8c4d4" rot={30} />
+      <Blossom cx={86} cy={78} size={19} color={MAUVE} rot={-15} />
+      <Blossom cx={134} cy={80} size={22} color={PINK} rot={22} />
+      <Blossom cx={168} cy={44} size={18} color="#e8c4d4" rot={-8} />
+      <Blossom cx={192} cy={100} size={16} color={MAUVE} rot={40} />
+      <Blossom cx={226} cy={72} size={20} color={PINK} rot={-25} />
+      <Blossom cx={236} cy={108} size={15} color="#e8c4d4" rot={12} />
+    </svg>
+  );
+}
+
+function CrescentAccent({ size = 150, color = GOLD, opacity = 0.5, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true"
+      style={{ opacity, display: "block", ...style }}>
+      <path d="M62 12 A38 38 0 1 0 62 88 A30 30 0 1 1 62 12 Z" fill={color} />
+      <circle cx="78" cy="30" r="3.2" fill={color} />
+      <circle cx="86" cy="46" r="2.2" fill={color} />
+      <circle cx="74" cy="60" r="1.8" fill={color} />
+    </svg>
+  );
+}
+
+function Lantern({ size = 70, color = GOLD, opacity = 0.55, style }) {
+  return (
+    <svg width={size} height={size * 1.5} viewBox="0 0 40 60" aria-hidden="true"
+      style={{ opacity, display: "block", ...style }}>
+      <line x1="20" y1="0" x2="20" y2="8" stroke={color} strokeWidth="1.5" />
+      <path d="M12 8 h16 v3 h-16 Z" fill={color} />
+      <path d="M9 11 C9 11, 4 22, 4 30 C4 40, 11 48, 20 48 C29 48, 36 40, 36 30 C36 22, 31 11, 31 11 Z"
+        fill="none" stroke={color} strokeWidth="1.6" />
+      <path d="M4 30 h32" stroke={color} strokeWidth="1" opacity="0.6" />
+      <path d="M7 21 h26 M7 39 h26" stroke={color} strokeWidth="0.9" opacity="0.45" />
+      <path d="M14 48 h12 v3 h-12 Z" fill={color} />
+      <line x1="20" y1="51" x2="20" y2="58" stroke={color} strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+/* ── Animated counter — counts up when scrolled into view ───────────── */
+function Counter({ to = 100, suffix = "", duration = 1600, label }) {
+  const ref = useRef(null);
+  const [val, setVal] = useState(0);
+  const started = useRef(false);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setVal(to); return; }
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting || started.current) return;
+      started.current = true;
+      obs.disconnect();
+      const start = performance.now();
+      const tick = (now) => {
+        const p = Math.min((now - start) / duration, 1);
+        setVal(Math.round(to * (1 - Math.pow(1 - p, 3))));
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }, { threshold: 0.4 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [to, duration]);
+  return (
+    <div ref={ref} style={{ textAlign: "center", minWidth: 150 }}>
+      <div style={{ fontSize: "clamp(34px,5vw,54px)", fontWeight: 800, color: GOLD,
+        lineHeight: 1, letterSpacing: "-1px" }}>{val}{suffix}</div>
+      <div style={{ marginTop: 8, fontSize: 13.5, color: "rgba(255,255,255,.75)",
+        letterSpacing: ".5px" }}>{label}</div>
+    </div>
+  );
+}
+
+/* ── Stats band — dark strip with counting numbers ──────────────────── */
+function StatsBand({ stats }) {
+  return (
+    <section style={{ position: "relative", overflow: "hidden", background: INK,
+      padding: "72px 20px" }}>
+      <Parallax speed={0.25} style={{ top: -30, left: -40, opacity: .5 }}>
+        <SakuraBranch width={240} opacity={.55} />
+      </Parallax>
+      <Parallax speed={-0.2} style={{ bottom: -20, right: -30, opacity: .5 }}>
+        <SakuraBranch width={220} flip opacity={.55} />
+      </Parallax>
+      <Parallax speed={0.4} style={{ top: 30, right: "18%" }}>
+        <CrescentAccent size={90} opacity={.28} />
+      </Parallax>
+      <div style={{ position: "relative", zIndex: 1, maxWidth: 1000, margin: "0 auto",
+        display: "flex", justifyContent: "space-around", gap: 36, flexWrap: "wrap" }}>
+        {stats.map((s, n) => (
+          <Reveal key={s.id ?? n} delay={n * 110}>
+            <Counter to={Number(s.value) || 0} suffix={s.suffix || ""} label={s.label} />
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 const seed = {
   hero: {
     title: "University of Washington Muslim Student Association",
@@ -302,6 +461,11 @@ const seed = {
     Saturday: [{ id: 6, name: "Community Service", time: "10:00 AM", loc: "Varies", desc: "Check Discord for location" }],
     Sunday: [{ id: 7, name: "Social Night", time: "7:00 PM", loc: "Varies", desc: "Games, food, friends" }],
   },
+  stats: [
+    { id: 1, value: "40", suffix: "+", label: "Events each year" },
+    { id: 2, value: "500", suffix: "+", label: "Students reached" },
+    { id: 3, value: "6", suffix: "", label: "Weekly programs" },
+  ],
   programs: [
     { id: 1, name: "Weekly Halaqas", desc: "Faith-centered circles for brothers and sisters, every week.", icon: "book" },
     { id: 2, name: "Quran Study", desc: "Tajweed, memorization, and reflection at every level.", icon: "star" },
@@ -397,6 +561,7 @@ export default function App() {
         <HomeSection data={data} onNav={scrollTo} />
         <PrayerSection data={data} />
         <EventsSection data={data} />
+        <StatsBand stats={data.stats || []} />
         <ProgramsSection data={data} />
         <ConnectSection data={data} />
       </main>
@@ -519,11 +684,45 @@ const mobLink = {
   textDecoration: "none",
 };
 
-function Band({ children, id, alt, style, divider, lattice }) {
+function Band({ children, id, alt, style, divider, lattice, decor }) {
   return (
     <section id={id} style={{ position: "relative", overflow: "hidden",
       padding: "92px 20px", background: alt ? "#fff" : "transparent", ...style }}>
       {lattice && <StarLatticeBg color={PURPLE} opacity={alt ? 0.05 : 0.045} unit={66} />}
+      {/* Parallax botanicals framing the section. `decor` picks the arrangement. */}
+      {decor === "left" && (
+        <>
+          <Parallax speed={0.22} style={{ top: -40, left: -70 }}>
+            <SakuraBranch width={230} opacity={.16} />
+          </Parallax>
+          <Parallax speed={-0.16} style={{ bottom: -30, right: -60 }}>
+            <CrescentAccent size={130} opacity={.09} />
+          </Parallax>
+        </>
+      )}
+      {decor === "right" && (
+        <>
+          <Parallax speed={0.2} style={{ top: -50, right: -70 }}>
+            <SakuraBranch width={230} flip opacity={.16} />
+          </Parallax>
+          <Parallax speed={-0.18} style={{ bottom: 10, left: -40 }}>
+            <Lantern size={80} opacity={.12} />
+          </Parallax>
+        </>
+      )}
+      {decor === "both" && (
+        <>
+          <Parallax speed={0.24} style={{ top: -46, left: -70 }}>
+            <SakuraBranch width={210} opacity={.15} />
+          </Parallax>
+          <Parallax speed={0.18} style={{ top: -30, right: -60 }}>
+            <SakuraBranch width={210} flip opacity={.15} />
+          </Parallax>
+          <Parallax speed={-0.2} style={{ bottom: -10, left: "45%" }}>
+            <CrescentAccent size={100} opacity={.08} />
+          </Parallax>
+        </>
+      )}
       {divider && (
         <div style={{ position: "relative", zIndex: 1, maxWidth: 1200, margin: "-40px auto 52px", opacity: .55 }}>
           <GirihBand color={GOLD} height={30} opacity={1} unit={44} />
@@ -597,7 +796,7 @@ function HomeSection({ data, onNav }) {
       </section>
 
       {/* Gallery */}
-      <Band id="gallery" lattice>
+      <Band id="gallery" lattice decor="left">
         <Eyebrow>Our community</Eyebrow>
         <Title>Moments from the year</Title>
         <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
@@ -853,7 +1052,7 @@ function PrayerSection({ data }) {
 /* ---------- EVENTS ---------- */
 function EventsSection({ data }) {
   return (
-    <Band id="events" divider lattice>
+    <Band id="events" divider lattice decor="both">
       <Eyebrow>This week</Eyebrow>
       <Title>Weekly calendar</Title>
       <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
@@ -906,7 +1105,7 @@ function EventsSection({ data }) {
 /* ---------- PROGRAMS ---------- */
 function ProgramsSection({ data }) {
   return (
-    <Band id="programs" alt divider lattice>
+    <Band id="programs" alt divider lattice decor="right">
       <Eyebrow>Get involved</Eyebrow>
       <Title>Our programs</Title>
       <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
@@ -941,7 +1140,7 @@ function ConnectSection({ data }) {
     facebook: "#1877F2", donate: `linear-gradient(135deg,${PURPLE},${GOLD})`, link: PURPLE,
   }[k] || PURPLE);
   return (
-    <Band id="connect" lattice>
+    <Band id="connect" lattice decor="left">
       <Eyebrow>Connect</Eyebrow>
       <Title>Find your people</Title>
       <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
@@ -1083,7 +1282,7 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
               {[
                 ["hero", "Home / Hero"], ["gallery", "Photos"], ["sponsors", "Sponsors"],
                 ["spaces", "Prayer spaces"], ["times", "Prayer times"], ["events", "Events"],
-                ["programs", "Programs"], ["links", "Links"],
+                ["programs", "Programs"], ["stats", "Stats"], ["links", "Links"],
               ].map(([k, lbl]) => (
                 <button key={k} onClick={() => setTab(k)} style={{ display: "block", width: "100%",
                   textAlign: "left", padding: "10px 12px", borderRadius: 9, border: "none",
@@ -1239,6 +1438,14 @@ function Editor({ tab, data, setData }) {
         onChange={(programs) => up({ programs })}
         blank={{ name: "New program", desc: "", icon: "star" }}
         fields={[["name", "Name"], ["desc", "Description"], ["icon", "Icon (book/star/grad/sparkles/hand/users)"]]} />
+    );
+
+  if (tab === "stats")
+    return (
+      <ListEditor title="Stats" items={data.stats || []}
+        onChange={(stats) => up({ stats })}
+        blank={{ value: "0", suffix: "+", label: "New stat" }}
+        fields={[["value", "Number"], ["suffix", "Suffix (e.g. + or %)"], ["label", "Label"]]} />
     );
 
   if (tab === "links")
