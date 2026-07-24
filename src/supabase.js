@@ -95,3 +95,59 @@ export async function deleteImage(path) {
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+/* ── Mailing list ───────────────────────────────────────────────────────
+   Signups go into a `subscribers` table. Anyone may INSERT (that's the
+   point of a signup form) but only authenticated admins may read the list,
+   so addresses can't be scraped with the public key.
+
+   Run this once in the Supabase SQL editor:
+
+     create table subscribers (
+       id bigserial primary key,
+       first_name text,
+       last_name text,
+       email text not null,
+       status text,
+       created_at timestamptz default now()
+     );
+     alter table subscribers enable row level security;
+     create policy "anyone can subscribe"
+       on subscribers for insert to anon, authenticated with check (true);
+     create policy "admins can read"
+       on subscribers for select to authenticated using (true);
+     create unique index subscribers_email_key on subscribers (lower(email));
+   ─────────────────────────────────────────────────────────────────────── */
+export async function subscribe({ firstName, lastName, email, status }) {
+  const clean = String(email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+    return { ok: false, error: "Please enter a valid email address." };
+  }
+  const { error } = await supabase.from("subscribers").insert({
+    first_name: (firstName || "").trim() || null,
+    last_name: (lastName || "").trim() || null,
+    email: clean,
+    status: status || null,
+  });
+  if (error) {
+    // Unique-index violation means they're already on the list — treat as success.
+    if (error.code === "23505" || /duplicate/i.test(error.message)) {
+      return { ok: true, already: true };
+    }
+    if (/relation .* does not exist/i.test(error.message)) {
+      return { ok: false, error: "Mailing list isn't set up yet — see the note in supabase.js." };
+    }
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+// Admin-only: read the subscriber list for export.
+export async function listSubscribers() {
+  const { data, error } = await supabase
+    .from("subscribers")
+    .select("first_name,last_name,email,status,created_at")
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, rows: data || [] };
+}
