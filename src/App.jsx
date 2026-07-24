@@ -5,7 +5,7 @@ import {
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
   Lock, LogOut, Plus, Trash2, Edit3, ChevronLeft, ChevronRight,
   Home, Star, HandHeart, GraduationCap, Sparkles, ExternalLink, Save,
-  Sun, Moon
+  Sun, Moon, ChevronDown, Mail, Send, CalendarDays, LayoutGrid, Info
 } from "lucide-react";
 
 /* ============================================================
@@ -30,15 +30,40 @@ const GOLD_D = "#B7A57A";     // original gold, for light surfaces
 const GRAD = `linear-gradient(120deg, ${VIOLET} 0%, ${MAUVE} 45%, ${PINK} 100%)`;
 const GRAD_DEEP = `linear-gradient(135deg, ${INK} 0%, ${PURPLE_D} 55%, ${PURPLE} 100%)`;
 
-const SECTIONS = [
-  { id: "home", label: "Home", external: false },
-  { id: "prayer", label: "Prayer", external: false },
-  { id: "events", label: "Events", external: false },
-  { id: "programs", label: "Programs", external: false },
-  { id: "board", label: "Board", external: false },
-  { id: "merch", label: "Merch", external: true, href: "https://intentionshq.com/products/msa-x-intentions-off-white-hoodie" },
-  { id: "connect", label: "Connect", external: false },
+const MERCH_URL = "https://intentionshq.com/products/msa-x-intentions-off-white-hoodie";
+
+/* Nav is grouped so it stays readable as the site grows. Top-level items
+   show on desktop; `children` render in a dropdown. On mobile everything
+   flattens into one scrollable list. */
+const NAV = [
+  { id: "home", label: "Home" },
+  { id: "about", label: "About" },
+  { id: "prayer", label: "Prayer" },
+  { id: "events", label: "Events" },
+  {
+    label: "Community", children: [
+      { id: "programs", label: "Programs" },
+      { id: "board", label: "Board" },
+      { id: "islamic-house", label: "Islamic House" },
+      { id: "sponsors", label: "Sponsors" },
+    ],
+  },
+  {
+    label: "More", children: [
+      { id: "announcements", label: "Announcements" },
+      { id: "connect", label: "Connect" },
+      { id: "contact", label: "Contact" },
+      { id: "merch", label: "Merch", external: true, href: MERCH_URL },
+    ],
+  },
+  { id: "donate", label: "Donate", cta: true },
 ];
+
+// Flat list of in-page section ids, used by the scroll spy.
+const SECTION_IDS = NAV.flatMap((n) =>
+  n.children ? n.children.filter((c) => !c.external).map((c) => c.id)
+             : (n.id ? [n.id] : [])
+);
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -801,6 +826,16 @@ const seed = {
   // `body` supports light Markdown: **bold**, *italic*, [text](url), and
   // blank lines for paragraphs.
   sections: {
+    about:    { eyebrow: "Who we are", title: "About MSA at UW",
+                body: "The Muslim Student Association is a home away from home for Muslim Huskies. We're here so that no student has to navigate university life alone — whether that means finding a place to pray between classes, a community to break fast with, or friends who understand." },
+    announcements: { eyebrow: "Latest", title: "Announcements",
+                body: "Reminders, deadlines, and everything you need to know this week." },
+    donate:   { eyebrow: "Support us", title: "Fuel the community",
+                body: "Every dollar goes straight back to students — iftars during Ramadan, weekly halaqas, retreats, and the Islamic House that keeps our doors open." },
+    islamicHouse: { eyebrow: "Our home on campus", title: "The Islamic House",
+                body: "A few steps from campus, the Islamic House is where the community gathers — for daily prayers, Jummah, iftars, and everything in between." },
+    contact:  { eyebrow: "Say salaam", title: "Get in touch",
+                body: "Questions, ideas, or just want to say hello? We'd genuinely love to hear from you — new students especially." },
     gallery:  { eyebrow: "Our community", title: "Moments from the year",
                 body: "Eid celebrations, Jummah, retreats, and the everyday gatherings that make MSA home." },
     sponsors: { eyebrow: "With support from", title: "Our sponsors & partners",
@@ -815,9 +850,68 @@ const seed = {
                 body: "Ways to grow, give back, and connect throughout the year." },
     connect:  { eyebrow: "Connect", title: "Find your people",
                 body: "Join the group chats, follow along, and support the community." },
-    donate:   { title: "Support the MSA",
-                body: "Your donation funds events, iftars, and student programs." },
   },
+  // ── About pillars ─────────────────────────────────────────────────────
+  about: {
+    intro: "MSA at UW has served Muslim students since 1968 — running daily prayers, weekly halaqas, Ramadan iftars, retreats and socials, and advocating for Muslim students on campus.",
+    pillars: [
+      { id: 1, icon: "star", title: "Faith",
+        text: "Daily prayers, Jummah, Quran circles and halaqas — spaces to keep your deen steady through the demands of the quarter." },
+      { id: 2, icon: "users", title: "Community",
+        text: "Iftars, BBQs, game nights and retreats. The friendships that make a large campus feel small." },
+      { id: 3, icon: "hand", title: "Service",
+        text: "Volunteering, fundraisers and outreach — putting what we believe into practice, on campus and beyond." },
+      { id: 4, icon: "sparkles", title: "Welcome",
+        text: "Every Muslim student belongs here, whichever background you come from and wherever you are in your practice. Non-Muslim friends are welcome too." },
+    ],
+  },
+  // ── Announcements / bulletin ─────────────────────────────────────────
+  // kind: "notice" | "deadline" | "event" | "ramadan"
+  announcements: [
+    { id: 1, kind: "notice", title: "Welcome back, Huskies!",
+      body: "Weekly halaqas resume this week — check the calendar for times and rooms.",
+      date: "", pinned: true, href: "" },
+    { id: 2, kind: "deadline", title: "Board applications close soon",
+      body: "Interested in helping run MSA next year? Applications are open now.",
+      date: "", pinned: false, href: "" },
+  ],
+  // ── Islamic House ────────────────────────────────────────────────────
+  islamicHouse: {
+    address: "Near NE 45th St, Seattle",
+    mapUrl: "",
+    hours: "Open for all five daily prayers · Jummah every Friday",
+    body: "The Islamic House is the heart of Muslim student life at UW. It hosts daily congregational prayers, Friday Jummah, Ramadan iftars and taraweeh, and community gatherings all year round. MSA works hand in hand with the House — many of our events happen here.\n\nEveryone is welcome, whether you're coming for prayer, for iftar, or just to find your feet on campus.",
+    donateUrl: "https://www.zeffy.com/en-US/donation-form/0b12beb3-2da5-4c6b-87b9-cfc84cf47e6a",
+    features: [
+      { id: 1, title: "Daily prayers", text: "All five prayers in congregation, every day." },
+      { id: 2, title: "Jummah", text: "Two khutbahs each Friday — check the prayer section for times." },
+      { id: 3, title: "Ramadan", text: "Nightly iftars and taraweeh throughout the month." },
+      { id: 4, title: "Community space", text: "A place to study, rest, and gather between classes." },
+    ],
+    photos: [],
+  },
+  // ── Contact ──────────────────────────────────────────────────────────
+  contact: {
+    email: "msauw@uw.edu",
+    note: "We usually reply within a couple of days. For urgent event questions, the Discord is fastest.",
+  },
+  // ── Donations ────────────────────────────────────────────────────────
+  donate: {
+    msaUrl: "https://www.zeffy.com/en-US/donation-form/44131d7a-557e-4fdc-9a70-14e9f67206ef",
+    houseUrl: "https://www.zeffy.com/en-US/donation-form/0b12beb3-2da5-4c6b-87b9-cfc84cf47e6a",
+    impact: [
+      { id: 1, amount: "$25", text: "Feeds a student at a Ramadan iftar" },
+      { id: 2, amount: "$100", text: "Covers refreshments for a weekly halaqa" },
+      { id: 3, amount: "$500", text: "Sponsors a full community event" },
+    ],
+  },
+  // ── Events extras ────────────────────────────────────────────────────
+  eventsExtra: {
+    suggestUrl: "",
+    suggestNote: "Have an idea for an event? We'd love to hear it.",
+  },
+  // Dated events power the monthly calendar. date is YYYY-MM-DD.
+  calendar: [],
   // ── Board members ─────────────────────────────────────────────────────
   // status: "current" | "previous". `href` is optional; when set the card
   // links out. `bio` shows in the expanded detail view.
@@ -930,7 +1024,8 @@ const linkIcon = (k) => {
    are replaced wholesale — an admin deleting the last item must stick. */
 function mergeContent(base, saved) {
   const out = { ...base, ...saved };
-  for (const key of ["hero", "sections", "prayerTimes", "events"]) {
+  for (const key of ["hero", "sections", "prayerTimes", "events", "about",
+                     "islamicHouse", "contact", "donate", "eventsExtra"]) {
     if (base[key] && typeof base[key] === "object" && !Array.isArray(base[key])) {
       const savedVal = saved?.[key];
       if (savedVal && typeof savedVal === "object" && !Array.isArray(savedVal)) {
@@ -1023,7 +1118,7 @@ export default function App() {
 
   // scroll spy
   useEffect(() => {
-    const ids = SECTIONS.filter((s) => !s.external).map((s) => s.id);
+    const ids = SECTION_IDS;
     const obs = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => { if (e.isIntersecting) setActive(e.target.id); });
@@ -1046,14 +1141,20 @@ export default function App() {
            petals={petals} onTogglePetals={() => setPetals((p) => !p)} />
       <main>
         <HomeSection data={data} onNav={scrollTo} />
+        <AnnouncementsSection data={data} />
+        <DonateSection data={data} />
+        <AboutSection data={data} />
         <PrayerSection data={data} />
+        <IslamicHouseSection data={data} />
+        <SponsorsSection data={data} />
         <EventsSection data={data} />
         <StatsBand stats={data.stats || []} />
         <ProgramsSection data={data} />
         <BoardSection data={data} />
         <ConnectSection data={data} />
+        <ContactSection data={data} />
       </main>
-      <Footer onAdmin={() => setAdminOpen(true)} />
+      <Footer onAdmin={() => setAdminOpen(true)} data={data} onNav={scrollTo} />
       {adminOpen && (
         <AdminPanel
           data={data} setData={setData}
@@ -1200,6 +1301,49 @@ function StyleTag() {
       }
       .lampglow { animation: lampPulse 5.5s ${EASE.inOut} infinite; }
 
+      /* ── Animated logo: breathing float, halo pulse, slow orbit ─────── */
+      @keyframes logoFloat {
+        0%,100% { transform: translate3d(0,0,0) scale(1); }
+        50%     { transform: translate3d(0,-7px,0) scale(1.012); }
+      }
+      .logofloat { animation: logoFloat 7s ${EASE.inOut} infinite; will-change: transform; }
+      @keyframes haloPulse {
+        0%,100% { opacity: .55; transform: scale(1); }
+        50%     { opacity: 1;   transform: scale(1.09); }
+      }
+      .logohalo { animation: haloPulse 6s ${EASE.inOut} infinite; }
+      @keyframes orbitSpin { to { transform: rotate(360deg); } }
+      .logoorbit { animation: orbitSpin 46s linear infinite; }
+
+      /* ── Tasbih sway ────────────────────────────────────────────────── */
+      @keyframes tasbihSwing {
+        0%,100% { transform: rotate(-3.2deg); }
+        50%     { transform: rotate(3.2deg); }
+      }
+      .tasbihswing { animation: tasbihSwing 7.5s ${EASE.inOut} infinite; }
+
+      /* ── Donate CTA: a slow, soft attention pulse (never flashy) ─────── */
+      @keyframes donateGlow {
+        0%,100% { box-shadow: 0 0 0 0 rgba(201,182,136,0); }
+        50%     { box-shadow: 0 0 0 7px rgba(201,182,136,.14); }
+      }
+      .donatepulse { animation: donateGlow 3.6s ${EASE.inOut} infinite; }
+
+      /* ── Ambient scroll lighting ────────────────────────────────────── */
+      @keyframes lightDrift {
+        0%   { transform: translate3d(0,0,0) scale(1); opacity: .5; }
+        33%  { transform: translate3d(4%,-3%,0) scale(1.16); opacity: .85; }
+        66%  { transform: translate3d(-3%,2%,0) scale(1.06); opacity: .62; }
+        100% { transform: translate3d(0,0,0) scale(1); opacity: .5; }
+      }
+      .lightorb { animation: lightDrift 26s ${EASE.inOut} infinite; will-change: transform, opacity; }
+      @keyframes softFlicker {
+        0%,100% { opacity: .62; }
+        42%     { opacity: .82; }
+        58%     { opacity: .70; }
+      }
+      .flicker { animation: softFlicker 8s ${EASE.inOut} infinite; }
+
       /* ── Decorative float — for SVG accents ─────────────────────────── */
       @keyframes floatY {
         0%   { transform: translate3d(0,0,0) rotate(0deg); }
@@ -1247,7 +1391,9 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
   petals, onTogglePetals }) {
   const [solid, setSolid] = useState(false);
   const [progress, setProgress] = useState(0);
-  // rAF-throttled so scrolling stays at 60fps even on long pages.
+  const [openMenu, setOpenMenu] = useState(null);  // which dropdown is open
+  const navRef = useRef(null);
+
   useEffect(() => {
     let ticking = false, raf = 0;
     const read = () => {
@@ -1267,8 +1413,35 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
       window.removeEventListener("resize", onScroll);
     };
   }, []);
+
+  // Close a dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDoc = (e) => { if (!navRef.current?.contains(e.target)) setOpenMenu(null); };
+    const onKey = (e) => { if (e.key === "Escape") setOpenMenu(null); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openMenu]);
+
+  // Lock body scroll while the mobile sheet is open.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [menuOpen]);
+
+  const groupActive = (item) =>
+    item.children?.some((c) => c.id === active);
+
+  const go = (id) => { setOpenMenu(null); setMenuOpen(false); onNav(id); };
+
   return (
-    <header style={{
+    <header ref={navRef} style={{
       position: "sticky", top: 0, zIndex: 50,
       background: solid ? "var(--nav-bg-solid)" : "var(--nav-bg)",
       backdropFilter: `blur(${solid ? 18 : 10}px) saturate(1.6)`,
@@ -1277,20 +1450,18 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
       boxShadow: solid ? "var(--card-shadow)" : "0 0 0 rgba(0,0,0,0)",
       transition: `background ${DUR.base}ms ${EASE.out}, box-shadow ${DUR.base}ms ${EASE.out}, border-color ${DUR.base}ms ${EASE.out}, backdrop-filter ${DUR.base}ms ${EASE.out}`,
     }}>
-      {/* Reading progress — a hairline that fills as you scroll */}
       <div aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: -1,
         height: 2, transformOrigin: "0 50%",
         transform: `scaleX(${progress})`,
         background: `linear-gradient(90deg, ${VIOLET}, ${GOLD})`,
         opacity: progress > 0.005 ? 1 : 0,
         transition: `opacity ${DUR.base}ms ${EASE.out}` }} />
-      {/* Height is animated with a transform-driven wrapper rather than
-          padding/height, so the sticky header never triggers layout on scroll. */}
+
       <nav style={{ maxWidth: 1200, margin: "0 auto", padding: "12px 20px",
-        display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button className="btn" onClick={() => onNav("home")} aria-label="MSA at UW — home" style={{
-          display: "flex", alignItems: "center", gap: 10, background: "none", border: "none",
-          cursor: "pointer", padding: 0, height: 44 }}>
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <button className="btn logomark" onClick={() => go("home")} aria-label="MSA at UW — home"
+          style={{ display: "flex", alignItems: "center", gap: 10, background: "none",
+            border: "none", cursor: "pointer", padding: 0, height: 44, flexShrink: 0 }}>
           <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo"
             style={{ height: 44, width: 44, borderRadius: 10, objectFit: "cover",
               transformOrigin: "left center",
@@ -1298,28 +1469,69 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
               transition: `transform ${DUR.base}ms ${EASE.out}` }} />
         </button>
 
-        <div className="desk" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          {SECTIONS.map((s) =>
-            s.external ? (
-              <a key={s.id} href={s.href} target="_blank" rel="noopener noreferrer"
-                 className="navlink" style={navLink(false)}>
-                {s.label} <ExternalLink size={13} style={{ verticalAlign: "-1px" }} />
-              </a>
-            ) : (
-              <button key={s.id} onClick={() => onNav(s.id)}
-                className="navlink" style={navLink(active === s.id)}>
-                {s.label}
-              </button>
-            )
-          )}
-          <button className="btn" onClick={onTogglePetals}
-            aria-pressed={!!petals}
+        {/* ── Desktop ─────────────────────────────────────────────────── */}
+        <div className="desk" style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {NAV.map((item) => {
+            if (item.children) {
+              const isOpen = openMenu === item.label;
+              return (
+                <div key={item.label} style={{ position: "relative" }}>
+                  <button className="navlink"
+                    onClick={() => setOpenMenu(isOpen ? null : item.label)}
+                    aria-expanded={isOpen} aria-haspopup="true"
+                    style={{ ...navLink(groupActive(item)), display: "inline-flex",
+                      alignItems: "center", gap: 5 }}>
+                    {item.label}
+                    <ChevronDown size={13} style={{
+                      transform: isOpen ? "rotate(180deg)" : "none",
+                      transition: `transform ${DUR.fast}ms ${EASE.out}` }} />
+                  </button>
+                  <div role="menu" style={{
+                    position: "absolute", top: "calc(100% + 8px)", left: 0, minWidth: 190,
+                    background: "var(--surface)", border: "1px solid var(--border)",
+                    borderRadius: 14, padding: 6, boxShadow: "var(--card-shadow-hover)",
+                    transformOrigin: "top left",
+                    opacity: isOpen ? 1 : 0,
+                    transform: isOpen ? "translate3d(0,0,0) scale(1)" : "translate3d(0,-6px,0) scale(.97)",
+                    pointerEvents: isOpen ? "auto" : "none",
+                    transition: `opacity ${DUR.fast}ms ${EASE.out}, transform ${DUR.fast}ms ${EASE.out}`,
+                  }}>
+                    {item.children.map((c) => c.external ? (
+                      <a key={c.id} href={c.href} target="_blank" rel="noopener noreferrer"
+                        role="menuitem" onClick={() => setOpenMenu(null)} style={dropItem(false)}>
+                        {c.label} <ExternalLink size={12} />
+                      </a>
+                    ) : (
+                      <button key={c.id} role="menuitem" onClick={() => go(c.id)}
+                        style={dropItem(active === c.id)}>{c.label}</button>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            if (item.cta) {
+              return (
+                <button key={item.id} className="btn" onClick={() => go(item.id)}
+                  style={{ marginLeft: 6, padding: "9px 18px", borderRadius: 999,
+                    border: "none", cursor: "pointer", fontFamily: "inherit",
+                    fontSize: 14, fontWeight: 700, color: "#2c2418",
+                    background: `linear-gradient(120deg, ${GOLD}, #e0cf9f)`,
+                    boxShadow: "0 6px 18px rgba(201,182,136,.35)",
+                    display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Heart size={14} /> {item.label}
+                </button>
+              );
+            }
+            return (
+              <button key={item.id} className="navlink" onClick={() => go(item.id)}
+                style={navLink(active === item.id)}>{item.label}</button>
+            );
+          })}
+
+          <button className="btn" onClick={onTogglePetals} aria-pressed={!!petals}
             title={petals ? "Turn off falling petals" : "Turn on falling petals"}
             aria-label={petals ? "Turn off falling petals" : "Turn on falling petals"}
-            style={{
-            marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
-            borderRadius: 10, border: `1px solid var(--border-strong)`,
-            background: petals ? "var(--nav-active-bg)" : "var(--surface)", cursor: "pointer" }}>
+            style={iconBtn}>
             <span style={{ display: "grid", placeItems: "center",
               opacity: petals ? 1 : .45,
               transform: petals ? "rotate(0deg) scale(1)" : "rotate(-18deg) scale(.9)",
@@ -1328,43 +1540,84 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
             </span>
           </button>
           <button className="btn themetoggle" onClick={onToggleDark}
-            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} style={{
-            marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
-            borderRadius: 10, border: `1px solid var(--border-strong)`,
-            background: "var(--surface)", cursor: "pointer", overflow: "hidden" }}>
+            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} style={iconBtn}>
             <span style={{ display: "grid", placeItems: "center",
               transform: dark ? "rotate(0deg)" : "rotate(-90deg) scale(.8)",
-              opacity: 1, transition: `transform ${DUR.base}ms ${EASE.spring}` }}>
+              transition: `transform ${DUR.base}ms ${EASE.spring}` }}>
               {dark ? <Sun size={16} color="var(--accent)" /> : <Moon size={16} color="var(--accent)" />}
             </span>
           </button>
-          <button className="btn" onClick={onAdmin} aria-label="Admin login" style={{
-            marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
-            borderRadius: 10, border: `1px solid var(--border-strong)`,
-            background: "var(--surface)", cursor: "pointer" }}>
+          <button className="btn" onClick={onAdmin} aria-label="Admin login" style={iconBtn}>
             <Lock size={16} color="var(--accent)" />
           </button>
         </div>
 
-        <button className="mob" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu"
-          style={{ display: "none", background: "none", border: "none", cursor: "pointer" }}>
+        {/* ── Mobile trigger ──────────────────────────────────────────── */}
+        <button className="mob" onClick={() => setMenuOpen(!menuOpen)}
+          aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen}
+          style={{ display: "none", background: "none", border: "none", cursor: "pointer",
+            padding: 6 }}>
           {menuOpen ? <X size={26} color="var(--accent)" /> : <Menu size={26} color="var(--accent)" />}
         </button>
       </nav>
 
-      {menuOpen && (
-        <div className="mob" style={{ display: "none", padding: "8px 20px 20px", background: "var(--nav-bg-solid)",
-          borderTop: `1px solid var(--border)` }}>
-          {SECTIONS.map((s) =>
-            s.external ? (
-              <a key={s.id} href={s.href} target="_blank" rel="noopener noreferrer"
-                 onClick={() => setMenuOpen(false)} style={mobLink}>
-                {s.label} <ExternalLink size={14} />
-              </a>
-            ) : (
-              <button key={s.id} onClick={() => onNav(s.id)} style={mobLink}>{s.label}</button>
-            )
-          )}
+      {/* ── Mobile sheet ──────────────────────────────────────────────────
+          Fixed below the bar and scrollable, so a long list can never run
+          off-screen no matter how many items there are. */}
+      <div className="mob" style={{
+        display: "none", position: "fixed", left: 0, right: 0, top: 68, bottom: 0,
+        background: "var(--nav-bg-solid)",
+        backdropFilter: "blur(18px) saturate(1.6)",
+        WebkitBackdropFilter: "blur(18px) saturate(1.6)",
+        borderTop: "1px solid var(--border)",
+        overflowY: "auto", WebkitOverflowScrolling: "touch",
+        opacity: menuOpen ? 1 : 0,
+        transform: menuOpen ? "translate3d(0,0,0)" : "translate3d(0,-8px,0)",
+        pointerEvents: menuOpen ? "auto" : "none",
+        transition: `opacity ${DUR.base}ms ${EASE.out}, transform ${DUR.base}ms ${EASE.out}`,
+        zIndex: 49,
+      }}>
+        <div style={{ padding: "10px 20px calc(28px + env(safe-area-inset-bottom, 0px))" }}>
+          {NAV.map((item) => {
+            if (item.children) {
+              return (
+                <div key={item.label} style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "1.4px",
+                    textTransform: "uppercase", color: "var(--text-faint)",
+                    padding: "12px 8px 4px" }}>{item.label}</div>
+                  {item.children.map((c) => c.external ? (
+                    <a key={c.id} href={c.href} target="_blank" rel="noopener noreferrer"
+                      onClick={() => setMenuOpen(false)} style={mobLink}>
+                      {c.label} <ExternalLink size={14} />
+                    </a>
+                  ) : (
+                    <button key={c.id} onClick={() => go(c.id)}
+                      style={{ ...mobLink, color: active === c.id ? "var(--accent)" : "var(--nav-idle)" }}>
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              );
+            }
+            if (item.cta) {
+              return (
+                <button key={item.id} onClick={() => go(item.id)}
+                  style={{ ...mobLink, marginTop: 14, justifyContent: "center",
+                    borderRadius: 12, borderBottom: "none", color: "#2c2418",
+                    background: `linear-gradient(120deg, ${GOLD}, #e0cf9f)`, fontWeight: 700 }}>
+                  <Heart size={16} /> {item.label}
+                </button>
+              );
+            }
+            return (
+              <button key={item.id} onClick={() => go(item.id)}
+                style={{ ...mobLink, color: active === item.id ? "var(--accent)" : "var(--nav-idle)" }}>
+                {item.label}
+              </button>
+            );
+          })}
+
+          <div style={{ height: 1, background: "var(--border)", margin: "14px 0 6px" }} />
           <button onClick={onToggleDark} style={mobLink}>
             {dark ? <Sun size={15} /> : <Moon size={15} />} {dark ? "Light mode" : "Dark mode"}
           </button>
@@ -1376,13 +1629,31 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
             <Lock size={15} /> Admin
           </button>
         </div>
-      )}
+      </div>
+
       <style>{`
-        @media (max-width: 860px) { .desk { display: none !important; } .mob { display: flex !important; } }
+        @media (max-width: 980px) { .desk { display: none !important; } .mob { display: block !important; } }
+        @media (max-width: 980px) { nav .mob { display: flex !important; } }
       `}</style>
     </header>
   );
 }
+
+const iconBtn = {
+  marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
+  borderRadius: 10, border: "1px solid var(--border-strong)",
+  background: "var(--surface)", cursor: "pointer", flexShrink: 0,
+};
+
+const dropItem = (on) => ({
+  display: "flex", alignItems: "center", gap: 6, width: "100%", textAlign: "left",
+  padding: "10px 12px", borderRadius: 9, border: "none", cursor: "pointer",
+  fontFamily: "inherit", fontSize: 14, fontWeight: 600, textDecoration: "none",
+  background: on ? "var(--nav-active-bg)" : "transparent",
+  color: on ? "var(--accent)" : "var(--nav-idle)",
+  transition: `background ${DUR.fast}ms ${EASE.out}, color ${DUR.fast}ms ${EASE.out}`,
+});
+
 const navLink = (on) => ({
   padding: "9px 14px", background: on ? "var(--nav-active-bg)" : "transparent",
   border: "none", cursor: "pointer", borderRadius: 10, fontWeight: 600, fontSize: 14.5,
@@ -1392,15 +1663,18 @@ const navLink = (on) => ({
 });
 const mobLink = {
   display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
-  padding: "13px 8px", background: "none", border: "none", borderBottom: "1px solid var(--border)",
+  padding: "13px 10px", background: "none", border: "none",
+  borderBottom: "1px solid var(--border)",
   fontSize: 16, fontWeight: 600, color: "var(--accent)", cursor: "pointer",
-  fontFamily: "inherit", textDecoration: "none",
+  fontFamily: "inherit", textDecoration: "none", borderRadius: 8,
 };
 
-function Band({ children, id, alt, style, divider, lattice, decor, floats, rosettes }) {
+function Band({ children, id, alt, style, divider, lattice, decor, floats, rosettes,
+  light, lightTone = "violet", lightAt = "top-left" }) {
   return (
     <section id={id} style={{ position: "relative", overflow: "hidden",
       padding: "92px 20px", background: alt ? "var(--surface)" : "transparent", ...style }}>
+      {light && <SectionLight tone={lightTone} placement={lightAt} />}
       {lattice && <StarLatticeBg color="var(--lattice)" opacity={alt ? 0.055 : 0.05} unit={66} />}
       {rosettes && <EdgeRosettes arrangement={rosettes} />}
       {floats}
@@ -1545,10 +1819,8 @@ function HomeSection({ data, onNav }) {
         <HeroArch />
         <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2,
           textAlign: "center", paddingBottom: 90 }}>
-          <HeroIntro delay={120}>
-            <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo"
-              style={{ width: 132, height: 132, borderRadius: 24, objectFit: "cover", marginBottom: 26,
-                boxShadow: "0 12px 40px rgba(0,0,0,.5)", border: "1px solid rgba(201,182,136,.3)" }} />
+          <HeroIntro delay={120} variant="scale">
+            <AnimatedLogo />
           </HeroIntro>
           <HeroIntro delay={300} variant="scale">
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8,
@@ -1572,6 +1844,11 @@ function HomeSection({ data, onNav }) {
             <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
               <button className="btn" onClick={() => onNav("connect")} style={btnGold}>Join MSA</button>
               <button className="btn" onClick={() => onNav("events")} style={btnGhost}>See what's on</button>
+              <button className="btn donatepulse" onClick={() => onNav("donate")}
+                style={{ ...btnGhost, borderColor: "rgba(201,182,136,.65)", color: GOLD,
+                  display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <Heart size={17} /> Donate
+              </button>
             </div>
           </HeroIntro>
         </div>
@@ -1583,7 +1860,7 @@ function HomeSection({ data, onNav }) {
       </section>
 
       {/* Gallery */}
-      <Band id="gallery" lattice decor="left" rosettes="left" floats={<>
+      <Band id="gallery" lattice decor="left" rosettes="left" light lightTone="violet" lightAt="top-left" floats={<>
         <Parallax speed={.12} float style={{ top: 20, right: "8%" }}>
           <Star8 size={64} color="var(--rosette)" opacity={.10} /></Parallax>
         <Parallax speed={-.08} float style={{ bottom: 40, left: "4%" }}>
@@ -1593,58 +1870,49 @@ function HomeSection({ data, onNav }) {
         <Gallery items={data.gallery} />
       </Band>
 
-      {/* Sponsors */}
-      <Band alt rosettes="wide">
-        <SectionCopy data={data} sectionKey="sponsors" />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))",
-          gap: 16, marginTop: 32 }}>
-          {data.sponsors.map((s, n) => {
-            const inner = s.logo ? (
-              <img src={s.logo} alt={s.name} className="sponsorlogo"
-                style={{ maxHeight: 60, maxWidth: "100%", objectFit: "contain" }} />
-            ) : (
-              <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: 15 }}>{s.name}</span>
-            );
-            const boxStyle = { ...card, display: "grid", placeItems: "center",
-              height: 96, textAlign: "center", padding: 16, textDecoration: "none" };
-            return (
-              <Reveal key={s.id} delay={n * 70} variant="scale" distance={22} duration={DUR.slow}>
-                {s.url ? (
-                  <a href={s.url} target="_blank" rel="noopener noreferrer"
-                    className="lift" style={boxStyle} title={`Visit ${s.name}`}>{inner}</a>
-                ) : (
-                  <div className="lift" style={boxStyle}>{inner}</div>
-                )}
-              </Reveal>
-            );
-          })}
-        </div>
-        <Reveal variant="rise" distance={30} duration={DUR.slow} delay={120}>
-          <div style={{ marginTop: 40, ...card, padding: "32px 28px", display: "flex",
-            alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap",
-            position: "relative", overflow: "hidden",
-            background: `linear-gradient(120deg, rgba(75,46,131,.05), rgba(183,165,122,.08))` }}>
-            <div aria-hidden="true" style={{ position: "absolute", right: -30, top: -40, opacity: .07 }}>
-              <Star8 size={190} color="var(--rosette)" />
-            </div>
-            <div style={{ position: "relative" }}>
-              <h3 style={{ margin: "0 0 6px", color: "var(--accent)", fontSize: 21, fontWeight: 700 }}>
-                {(data.sections?.donate?.title) ?? seed.sections.donate.title}</h3>
-              <div style={{ color: "var(--text-muted)" }}>
-                <Markdown text={(data.sections?.donate?.body) ?? seed.sections.donate.body}
-                  style={{ margin: 0 }} />
-              </div>
-            </div>
-            <a className="btn" href="https://www.zeffy.com/en-US/donation-form/44131d7a-557e-4fdc-9a70-14e9f67206ef"
-               target="_blank" rel="noopener noreferrer"
-               style={{ ...btnGold, position: "relative", textDecoration: "none",
-                 display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <Heart size={18} /> Donate
-            </a>
-          </div>
-        </Reveal>
-      </Band>
     </>
+  );
+}
+
+/* ---------- SPONSORS ---------- */
+function SponsorsSection({ data }) {
+  return (
+    <Band id="sponsors" alt lattice rosettes="wide" light lightTone="violet" lightAt="bottom-left">
+      <SectionCopy data={data} sectionKey="sponsors" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))",
+        gap: 16, marginTop: 8 }}>
+        {(data.sponsors || []).map((s, n) => {
+          const inner = s.logo ? (
+            <img src={s.logo} alt={s.name} className="sponsorlogo"
+              style={{ maxHeight: 60, maxWidth: "100%", objectFit: "contain" }} />
+          ) : (
+            <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: 15 }}>{s.name}</span>
+          );
+          const boxStyle = { ...card, display: "grid", placeItems: "center",
+            height: 96, textAlign: "center", padding: 16, textDecoration: "none" };
+          return (
+            <Reveal key={s.id} delay={n * 70} variant="scale" distance={22} duration={DUR.slow}>
+              {s.url ? (
+                <a href={s.url} target="_blank" rel="noopener noreferrer"
+                  className="lift" style={boxStyle} title={`Visit ${s.name}`}>{inner}</a>
+              ) : (
+                <div className="lift" style={boxStyle}>{inner}</div>
+              )}
+            </Reveal>
+          );
+        })}
+      </div>
+      <Reveal variant="rise" distance={26} delay={140}>
+        <div style={{ marginTop: 30, textAlign: "center" }}>
+          <a className="btn" href={(data.donate || seed.donate).msaUrl}
+            target="_blank" rel="noopener noreferrer"
+            style={{ ...btnPurple, textDecoration: "none", display: "inline-flex",
+              alignItems: "center", gap: 8 }}>
+            <Heart size={15} /> Become a sponsor
+          </a>
+        </div>
+      </Reveal>
+    </Band>
   );
 }
 
@@ -1761,6 +2029,103 @@ function HangingLanterns() {
         </div>
       ))}
     </div>
+  );
+}
+
+/* Hero logo — breathes gently, sits inside a soft halo, and lifts on hover.
+   The halo and the float live on separate wrappers so their transforms
+   never fight each other. */
+function AnimatedLogo() {
+  const reduced = useReducedMotion();
+  const [hover, setHover] = useState(false);
+  return (
+    <div style={{ position: "relative", display: "inline-block", marginBottom: 26 }}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {/* halo */}
+      <div aria-hidden="true" className={reduced ? "" : "logohalo"} style={{
+        position: "absolute", left: "50%", top: "50%", width: 230, height: 230,
+        marginLeft: -115, marginTop: -115, borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(201,182,136,.34) 0%, transparent 66%)",
+        filter: "blur(16px)", pointerEvents: "none",
+      }} />
+      {/* slow orbiting ring of tiny stars */}
+      {!reduced && (
+        <div aria-hidden="true" className="logoorbit" style={{
+          position: "absolute", left: "50%", top: "50%", width: 186, height: 186,
+          marginLeft: -93, marginTop: -93, pointerEvents: "none",
+        }}>
+          {[0, 90, 180, 270].map((deg) => (
+            <span key={deg} style={{ position: "absolute", left: "50%", top: "50%",
+              transform: `rotate(${deg}deg) translateY(-93px)` }}>
+              <Star8 size={9} color={GOLD} opacity={.5} />
+            </span>
+          ))}
+        </div>
+      )}
+      <div className={reduced ? "" : "logofloat"} style={{ position: "relative" }}>
+        <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo"
+          style={{ width: 132, height: 132, borderRadius: 24, objectFit: "cover",
+            display: "block",
+            boxShadow: hover
+              ? "0 20px 54px rgba(0,0,0,.55), 0 0 0 1px rgba(201,182,136,.55)"
+              : "0 12px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(201,182,136,.3)",
+            transform: hover ? "scale(1.045)" : "scale(1)",
+            transition: `transform ${DUR.base}ms ${EASE.spring}, box-shadow ${DUR.base}ms ${EASE.out}` }} />
+      </div>
+    </div>
+  );
+}
+
+/* ── Tasbih (misbaha) ───────────────────────────────────────────────────
+   A strand of prayer beads that sways like a pendulum, with a single bead
+   catching the light as it travels the loop. Drawn as one SVG so it stays
+   crisp, and animated purely with transform/opacity. */
+function Tasbih({ height = 190, opacity = 0.5, color = GOLD, style }) {
+  const reduced = useReducedMotion();
+  const BEADS = 21;
+  // Beads sit on a narrow teardrop loop.
+  const pts = React.useMemo(() => {
+    const out = [];
+    for (let i = 0; i < BEADS; i++) {
+      const t = (i / BEADS) * Math.PI * 2;
+      out.push({
+        x: +(Math.sin(t) * 26).toFixed(2),
+        y: +(56 + Math.cos(t) * 40).toFixed(2),
+        r: i % 7 === 0 ? 4.4 : 3.3,   // marker beads every 7th
+      });
+    }
+    return out;
+  }, []);
+  return (
+    <svg width={height * 0.62} height={height} viewBox="0 0 80 130" aria-hidden="true"
+      style={{ display: "block", opacity, overflow: "visible", ...style }}>
+      <g className={reduced ? "" : "tasbihswing"} style={{ transformOrigin: "40px 6px" }}>
+        {/* hanging cord */}
+        <line x1="40" y1="0" x2="40" y2="16" stroke={color} strokeWidth="1" opacity=".8" />
+        {/* imam bead + tassel */}
+        <ellipse cx="40" cy="20" rx="4" ry="5.4" fill={color} opacity=".9" />
+        <g transform="translate(40,0)">
+          {pts.map((p, i) => (
+            <circle key={i} cx={40 + p.x - 40 + p.x * 0} cy={p.y} r={p.r}
+              fill={color} opacity={i % 7 === 0 ? 0.95 : 0.7}
+              transform={`translate(${p.x},0)`} />
+          ))}
+        </g>
+        {/* tassel */}
+        <line x1="40" y1="112" x2="40" y2="124" stroke={color} strokeWidth="1" opacity=".7" />
+        <path d="M36 124 L44 124 L42 130 L38 130 Z" fill={color} opacity=".7" />
+        {/* travelling highlight — one bead lighting up as it moves round */}
+        {!reduced && (
+          <circle r="4.6" fill="#fff" opacity=".85">
+            <animateMotion dur="9s" repeatCount="indefinite"
+              path="M0,16 C26,16 26,96 0,96 C-26,96 -26,16 0,16 Z"
+              transform="translate(40,0)" />
+            <animate attributeName="opacity" values="0;.85;.85;0"
+              dur="9s" repeatCount="indefinite" />
+          </circle>
+        )}
+      </g>
+    </svg>
   );
 }
 
@@ -2052,12 +2417,15 @@ function MasjidalWidget({ id, embed }) {
 function PrayerSection({ data }) {
   const t = data.prayerTimes;
   return (
-    <Band id="prayer" alt lattice rosettes="right">
+    <Band id="prayer" alt lattice rosettes="right" light lightTone="gold" lightAt="bottom-left">
       <SectionCopy data={data} sectionKey="prayer" />
+      <Parallax speed={-0.12} style={{ bottom: 60, left: "1%" }}>
+        <Tasbih height={170} opacity={0.24} color="var(--rosette)" />
+      </Parallax>
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 24, marginTop: 32,
         alignItems: "start" }} className="prayer-grid">
         <div style={{ display: "grid", gap: 16 }}>
-          {data.prayerSpaces.map((s, n) => (
+          {(data.prayerSpaces || []).map((s, n) => (
             <Reveal key={s.id} delay={n * 70} variant="left" distance={22}>
             <div className="lift" style={{ ...card, padding: "22px 24px", display: "flex", gap: 16 }}>
               <div style={{ flexShrink: 0, width: 46, height: 56, position: "relative",
@@ -2137,11 +2505,253 @@ function PrayerSection({ data }) {
   );
 }
 
+/* ── Monthly calendar ───────────────────────────────────────────────────
+   Renders dated events (data.calendar) in a month grid, alongside the
+   recurring weekly view. Pure date maths — no library. */
+const MONTH_NAMES = ["January","February","March","April","May","June",
+  "July","August","September","October","November","December"];
+const DOW_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function monthMatrix(year, month) {
+  const first = new Date(year, month, 1);
+  const startDow = first.getDay();
+  const daysIn = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysIn; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
+function MonthCalendar({ events }) {
+  const today = new Date();
+  const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [picked, setPicked] = useState(null);
+  const reduced = useReducedMotion();
+
+  // Index events by YYYY-MM-DD for O(1) lookup per cell.
+  const byDate = React.useMemo(() => {
+    const map = {};
+    (events || []).forEach((e) => {
+      if (!e.date) return;
+      (map[e.date] = map[e.date] || []).push(e);
+    });
+    return map;
+  }, [events]);
+
+  const cells = monthMatrix(cursor.y, cursor.m);
+  const key = (d) =>
+    `${cursor.y}-${String(cursor.m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  const shift = (delta) => {
+    setPicked(null);
+    setCursor(({ y, m }) => {
+      const nm = m + delta;
+      if (nm < 0) return { y: y - 1, m: 11 };
+      if (nm > 11) return { y: y + 1, m: 0 };
+      return { y, m: nm };
+    });
+  };
+
+  const isToday = (d) =>
+    d && today.getFullYear() === cursor.y && today.getMonth() === cursor.m && today.getDate() === d;
+
+  const pickedEvents = picked ? (byDate[picked] || []) : [];
+
+  return (
+    <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 12, padding: "16px 18px", background: "var(--tint)" }}>
+        <button className="btn" onClick={() => shift(-1)} aria-label="Previous month"
+          style={boardNavBtn}><ChevronLeft size={17} color="var(--accent)" /></button>
+        <div style={{ fontWeight: 800, fontSize: 16.5, color: "var(--accent)" }}>
+          {MONTH_NAMES[cursor.m]} {cursor.y}
+        </div>
+        <button className="btn" onClick={() => shift(1)} aria-label="Next month"
+          style={boardNavBtn}><ChevronRight size={17} color="var(--accent)" /></button>
+      </div>
+
+      <div style={{ padding: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4,
+          marginBottom: 6 }}>
+          {DOW_SHORT.map((d) => (
+            <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 700,
+              letterSpacing: ".6px", textTransform: "uppercase", color: "var(--text-faint)",
+              padding: "4px 0" }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+          {cells.map((d, i) => {
+            if (!d) return <div key={i} />;
+            const k = key(d);
+            const evs = byDate[k] || [];
+            const has = evs.length > 0;
+            const sel = picked === k;
+            return (
+              <button key={i} onClick={() => has && setPicked(sel ? null : k)}
+                aria-label={has ? `${d}: ${evs.length} event${evs.length > 1 ? "s" : ""}` : String(d)}
+                disabled={!has}
+                style={{
+                  aspectRatio: "1 / 1", minHeight: 38, borderRadius: 10, padding: 0,
+                  cursor: has ? "pointer" : "default", fontFamily: "inherit",
+                  border: sel ? `2px solid ${GOLD}`
+                    : isToday(d) ? "2px solid var(--accent)" : "1px solid var(--border)",
+                  background: has ? "var(--tint-2)" : "transparent",
+                  color: has ? "var(--accent)" : "var(--text-faint)",
+                  fontWeight: has || isToday(d) ? 700 : 500, fontSize: 13.5,
+                  display: "grid", placeItems: "center", position: "relative",
+                  transition: reduced ? "none"
+                    : `background ${DUR.fast}ms ${EASE.out}, border-color ${DUR.fast}ms ${EASE.out}, transform ${DUR.fast}ms ${EASE.out}`,
+                  transform: sel ? "translate3d(0,-2px,0)" : "none",
+                }}>
+                {d}
+                {has && (
+                  <span aria-hidden="true" style={{ position: "absolute", bottom: 5,
+                    display: "flex", gap: 2 }}>
+                    {evs.slice(0, 3).map((_, n) => (
+                      <span key={n} style={{ width: 4, height: 4, borderRadius: 99,
+                        background: GOLD }} />
+                    ))}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected day detail — animates open without measuring height */}
+        <div style={{ display: "grid",
+          gridTemplateRows: pickedEvents.length ? "1fr" : "0fr",
+          opacity: pickedEvents.length ? 1 : 0,
+          marginTop: pickedEvents.length ? 12 : 0,
+          transition: reduced ? "none"
+            : `grid-template-rows ${DUR.base}ms ${EASE.out}, opacity ${DUR.base}ms ${EASE.out}, margin-top ${DUR.base}ms ${EASE.out}` }}>
+          <div style={{ overflow: "hidden" }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              {pickedEvents.map((e) => (
+                <div key={e.id} style={{ borderRadius: 10, padding: "12px 14px",
+                  background: "var(--tint)", border: "1px solid var(--border)" }}>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, color: "var(--text)" }}>
+                    {e.name}</div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
+                    {e.time && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                        fontSize: 12.5, color: "var(--accent)", fontWeight: 600 }}>
+                        <Clock size={12} /> {e.time}</span>
+                    )}
+                    {e.loc && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                        fontSize: 12.5, color: "var(--text-faint)" }}>
+                        <MapPin size={12} /> {e.loc}</span>
+                    )}
+                  </div>
+                  {e.desc && (
+                    <div style={{ marginTop: 6, fontSize: 12.5, color: "var(--text-muted)",
+                      lineHeight: 1.55 }}>{e.desc}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {Object.keys(byDate).length === 0 && (
+          <div style={{ marginTop: 12, textAlign: "center", fontSize: 13,
+            color: "var(--text-faint)", padding: "10px 0" }}>
+            No dated events yet — add them from the admin panel.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- EVENTS ---------- */
 function EventsSection({ data }) {
   return (
-    <Band id="events" divider lattice decor="both" rosettes="both">
+    <Band id="events" divider lattice decor="both" rosettes="both" light lightTone="gold" lightAt="top-right">
       <SectionCopy data={data} sectionKey="events" />
+      <EventsViews data={data} />
+    </Band>
+  );
+}
+
+/* Weekly / monthly toggle plus the suggestion CTA. */
+function EventsViews({ data }) {
+  const [view, setView] = useState("week");
+  const reduced = useReducedMotion();
+  const extra = data.eventsExtra || seed.eventsExtra;
+  return (
+    <>
+      <Reveal variant="up" distance={16}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 14, flexWrap: "wrap", marginBottom: 24 }}>
+          <div role="tablist" aria-label="Event views"
+            style={{ display: "inline-flex", position: "relative", padding: 4, borderRadius: 999,
+              background: "var(--tint)", border: "1px solid var(--border)" }}>
+            <span aria-hidden="true" style={{ position: "absolute", top: 4, bottom: 4, left: 4,
+              width: "calc(50% - 4px)", borderRadius: 999, background: "var(--surface)",
+              boxShadow: "var(--card-shadow)",
+              transform: view === "week" ? "translateX(0)" : "translateX(100%)",
+              transition: reduced ? "none" : `transform ${DUR.base}ms ${EASE.out}` }} />
+            {[["week", "This week", LayoutGrid], ["month", "Monthly", CalendarDays]].map(([k, label, Icon]) => (
+              <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)}
+                style={{ position: "relative", zIndex: 1, border: "none", background: "none",
+                  cursor: "pointer", padding: "9px 18px", borderRadius: 999,
+                  fontFamily: "inherit", fontSize: 14, fontWeight: 700,
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                  color: view === k ? "var(--accent)" : "var(--text-muted)",
+                  transition: `color ${DUR.fast}ms ${EASE.out}` }}>
+                <Icon size={15} /> {label}
+              </button>
+            ))}
+          </div>
+          {extra.suggestUrl && (
+            <a className="btn" href={extra.suggestUrl} target="_blank" rel="noopener noreferrer"
+              style={{ ...btnPurple, textDecoration: "none", display: "inline-flex",
+                alignItems: "center", gap: 8 }}>
+              <Send size={15} /> Suggest an event
+            </a>
+          )}
+        </div>
+      </Reveal>
+
+      {view === "week"
+        ? <WeeklyEvents data={data} />
+        : <Reveal variant="rise" distance={24}><MonthCalendar events={data.calendar || []} /></Reveal>}
+
+      <Reveal delay={160} variant="rise" distance={24}>
+        <div style={{ marginTop: 26, ...card, padding: "24px 26px", display: "flex",
+          alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap",
+          background: "linear-gradient(120deg, var(--tint), var(--tint-2))" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0,
+              display: "grid", placeItems: "center",
+              background: `linear-gradient(135deg, ${PURPLE}, ${VIOLET})` }}>
+              <Sparkles size={20} color="#fff" />
+            </div>
+            <div>
+              <h3 style={{ margin: "0 0 3px", fontSize: 17, fontWeight: 700,
+                color: "var(--accent)" }}>Got an idea?</h3>
+              <p style={{ margin: 0, fontSize: 14, color: "var(--text-muted)" }}>
+                {extra.suggestNote}</p>
+            </div>
+          </div>
+          <a className="btn" href={extra.suggestUrl || "mailto:msauw@uw.edu?subject=Event%20suggestion"}
+            target={extra.suggestUrl ? "_blank" : undefined}
+            rel={extra.suggestUrl ? "noopener noreferrer" : undefined}
+            style={{ ...btnGold, textDecoration: "none", display: "inline-flex",
+              alignItems: "center", gap: 8 }}>
+            <Send size={16} /> Suggest an event
+          </a>
+        </div>
+      </Reveal>
+    </>
+  );
+}
+
+function WeeklyEvents({ data }) {
+  return (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 16 }}>
         {DAYS.map((day, dn) => {
           const evs = data.events[day] || [];
@@ -2182,9 +2792,405 @@ function EventsSection({ data }) {
           );
         })}
       </div>
+  );
+}
+
+/* ── Ambient scroll lighting ────────────────────────────────────────────
+   Soft light pools that live behind a section and gain intensity as it
+   comes into view, then settle. Purely transform/opacity on blurred
+   radial gradients, so it costs almost nothing. */
+function SectionLight({ tone = "violet", intensity = 1, placement = "top-left" }) {
+  const reduced = useReducedMotion();
+  const [ref, inView] = useInView({ threshold: 0.05, rootMargin: "0px 0px -5% 0px", once: false });
+  if (reduced) return null;
+  const tones = {
+    violet: "rgba(140,120,180,",
+    rose:   "rgba(180,120,140,",
+    gold:   "rgba(201,182,136,",
+  };
+  const base = tones[tone] || tones.violet;
+  const spots = {
+    "top-left":     { top: "-16%", left: "-10%" },
+    "top-right":    { top: "-14%", right: "-8%" },
+    "bottom-left":  { bottom: "-18%", left: "-8%" },
+    "bottom-right": { bottom: "-16%", right: "-10%" },
+  };
+  return (
+    <div ref={ref} aria-hidden="true" style={{ position: "absolute", inset: 0,
+      overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+      <div className="lightorb" style={{
+        position: "absolute", width: 520, height: 520, borderRadius: "50%",
+        background: `radial-gradient(circle, ${base}${(0.30 * intensity).toFixed(2)}) 0%, transparent 68%)`,
+        filter: "blur(58px)",
+        opacity: inView ? 1 : 0.28,
+        transition: `opacity 1400ms ${EASE.outSoft}`,
+        ...spots[placement],
+      }} />
+    </div>
+  );
+}
+
+/* ---------- ABOUT ---------- */
+function AboutSection({ data }) {
+  const about = data.about || seed.about;
+  return (
+    <Band id="about" lattice rosettes="right" decor="left" light lightTone="violet" lightAt="top-right">
+      <SectionCopy data={data} sectionKey="about" />
+      {about.intro && (
+        <Reveal delay={200} variant="up" distance={18}>
+          <div style={{ maxWidth: 720, marginBottom: 34, color: "var(--text-muted)",
+            fontSize: 16.5, lineHeight: 1.7 }}>
+            <Markdown text={about.intro} style={{ margin: "0 0 12px" }} />
+          </div>
+        </Reveal>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+        gap: 18 }}>
+        {(about.pillars || []).map((p, n) => (
+          <Reveal key={p.id} delay={n * 85} variant="rise" distance={28} duration={DUR.slow}>
+            <div className="lift" style={{ ...card, padding: "26px 24px", height: "100%" }}>
+              <div style={{ width: 50, height: 58, position: "relative", display: "grid",
+                placeItems: "center", marginBottom: 14 }}>
+                <div style={{ position: "absolute", inset: 0 }}>
+                  <Arch w={50} h={58} spring={36} stroke="rgba(183,165,122,.5)" sw={1.2}
+                    fill="rgba(183,165,122,.15)" style={{ width: "100%", height: "100%" }} />
+                </div>
+                <div style={{ position: "relative", marginTop: 8 }}>{progIcon(p.icon)}</div>
+              </div>
+              <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700,
+                color: "var(--accent)" }}>{p.title}</h3>
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 14.5,
+                lineHeight: 1.65 }}>{p.text}</p>
+            </div>
+          </Reveal>
+        ))}
+      </div>
     </Band>
   );
 }
+
+/* ---------- ANNOUNCEMENTS ---------- */
+const ANN_KINDS = {
+  notice:   { label: "Notice",   color: "#8c78b4" },
+  deadline: { label: "Deadline", color: "#b4788c" },
+  event:    { label: "Event",    color: "#c9b688" },
+  ramadan:  { label: "Ramadan",  color: "#7fa08c" },
+};
+
+function AnnouncementsSection({ data }) {
+  const items = data.announcements || [];
+  // Pinned first, otherwise keep admin ordering.
+  const sorted = [...items].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+  return (
+    <Band id="announcements" alt lattice rosettes="left" light lightTone="gold" lightAt="top-left">
+      <SectionCopy data={data} sectionKey="announcements" />
+      {sorted.length === 0 ? (
+        <Reveal>
+          <div style={{ ...card, padding: "26px 24px", color: "var(--text-faint)",
+            fontSize: 14.5 }}>Nothing new right now — check back soon.</div>
+        </Reveal>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))",
+          gap: 16 }}>
+          {sorted.map((a, n) => {
+            const kind = ANN_KINDS[a.kind] || ANN_KINDS.notice;
+            const Wrapper = a.href ? "a" : "div";
+            const wrapProps = a.href
+              ? { href: a.href, target: "_blank", rel: "noopener noreferrer" } : {};
+            return (
+              <Reveal key={a.id} delay={n * 75} variant="rise" distance={26}>
+                <Wrapper {...wrapProps} className="lift" style={{ ...card, display: "block",
+                  padding: 0, overflow: "hidden", height: "100%", textDecoration: "none",
+                  position: "relative" }}>
+                  {/* colour spine marks the kind at a glance */}
+                  <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 0,
+                    bottom: 0, width: 4, background: kind.color }} />
+                  <div style={{ padding: "20px 22px 20px 26px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
+                      flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "1.2px",
+                        textTransform: "uppercase", color: kind.color }}>{kind.label}</span>
+                      {a.pinned && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".6px",
+                          textTransform: "uppercase", color: "var(--text-faint)",
+                          border: "1px solid var(--border-strong)", borderRadius: 99,
+                          padding: "2px 8px" }}>Pinned</span>
+                      )}
+                      {a.date && (
+                        <span style={{ marginLeft: "auto", fontSize: 12.5,
+                          color: "var(--text-faint)" }}>{a.date}</span>
+                      )}
+                    </div>
+                    <h3 style={{ margin: "0 0 8px", fontSize: 17.5, fontWeight: 700,
+                      color: "var(--text)" }}>{a.title}</h3>
+                    {a.body && (
+                      <div style={{ color: "var(--text-muted)", fontSize: 14.5, lineHeight: 1.6 }}>
+                        <Markdown text={a.body} style={{ margin: "0 0 8px" }} />
+                      </div>
+                    )}
+                    {a.href && (
+                      <div style={{ marginTop: 10, color: "var(--accent)", fontSize: 13,
+                        fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        Read more <ExternalLink size={12} />
+                      </div>
+                    )}
+                  </div>
+                </Wrapper>
+              </Reveal>
+            );
+          })}
+        </div>
+      )}
+    </Band>
+  );
+}
+
+/* ---------- DONATE ---------- */
+function DonateSection({ data }) {
+  const d = data.donate || seed.donate;
+  return (
+    <section id="donate" style={{ position: "relative", overflow: "hidden",
+      background: GRAD_DEEP, color: "#fff", padding: "88px 20px" }}>
+      <AmbientGlow subtle />
+      <div aria-hidden="true" style={{ position: "absolute", top: "-24%", left: "-6%",
+        pointerEvents: "none", zIndex: 0 }}>
+        <ScrollSpin speed={18}>
+          <Rosette points={12} skip={5} size={300} color={GOLD} opacity={0.10} />
+        </ScrollSpin>
+      </div>
+      <div aria-hidden="true" style={{ position: "absolute", bottom: "-28%", right: "-5%",
+        pointerEvents: "none", zIndex: 0 }}>
+        <ScrollSpin speed={-22}>
+          <Rosette points={16} skip={7} size={260} color={GOLD} opacity={0.10} />
+        </ScrollSpin>
+      </div>
+
+      <div style={{ position: "relative", zIndex: 1, maxWidth: 1000, margin: "0 auto",
+        textAlign: "center" }}>
+        <Reveal variant="up" distance={20}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
+            border: "1px solid rgba(201,182,136,.4)", marginBottom: 20 }}>
+            <Heart size={14} color={GOLD} />
+            <span style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: "1.4px",
+              textTransform: "uppercase", color: GOLD }}>
+              {data.sections?.donate?.eyebrow ?? seed.sections.donate.eyebrow}</span>
+          </div>
+        </Reveal>
+        <h2 style={{ fontSize: "clamp(28px,4.4vw,46px)", fontWeight: 800, letterSpacing: "-1px",
+          lineHeight: 1.1, margin: "0 0 16px" }}>
+          <TextReveal text={data.sections?.donate?.title ?? seed.sections.donate.title}
+            delay={80} step={48} />
+        </h2>
+        <Reveal delay={260} variant="up" distance={16}>
+          <div style={{ maxWidth: 640, margin: "0 auto 34px", color: "rgba(255,255,255,.85)",
+            fontSize: 16.5, lineHeight: 1.7 }}>
+            <Markdown text={data.sections?.donate?.body ?? seed.sections.donate.body}
+              style={{ margin: "0 0 10px" }} />
+          </div>
+        </Reveal>
+
+        {/* Impact tiers */}
+        {(d.impact || []).length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+            gap: 14, maxWidth: 760, margin: "0 auto 34px" }}>
+            {d.impact.map((t, n) => (
+              <Reveal key={t.id} delay={340 + n * 90} variant="rise" distance={22}>
+                <div style={{ padding: "20px 18px", borderRadius: 16,
+                  background: "rgba(255,255,255,.06)",
+                  border: "1px solid rgba(201,182,136,.28)", height: "100%" }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: GOLD, lineHeight: 1 }}>
+                    {t.amount}</div>
+                  <div style={{ marginTop: 8, fontSize: 13.5, color: "rgba(255,255,255,.8)",
+                    lineHeight: 1.5 }}>{t.text}</div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        )}
+
+        <Reveal delay={620} variant="up" distance={18}>
+          <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+            <a className="btn" href={d.msaUrl} target="_blank" rel="noopener noreferrer"
+              style={{ ...btnGold, textDecoration: "none", display: "inline-flex",
+                alignItems: "center", gap: 9, fontSize: 16, padding: "15px 32px" }}>
+              <Heart size={18} /> Donate to MSA
+            </a>
+            <a className="btn" href={d.houseUrl} target="_blank" rel="noopener noreferrer"
+              style={{ ...btnGhost, textDecoration: "none", display: "inline-flex",
+                alignItems: "center", gap: 9, fontSize: 16, padding: "15px 32px" }}>
+              Support the Islamic House
+            </a>
+          </div>
+        </Reveal>
+        <Reveal delay={720}>
+          <p style={{ marginTop: 18, fontSize: 12.5, color: "rgba(255,255,255,.55)" }}>
+            Donations are processed securely through Zeffy — 100% reaches the MSA.
+          </p>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- ISLAMIC HOUSE ---------- */
+function IslamicHouseSection({ data }) {
+  const h = data.islamicHouse || seed.islamicHouse;
+  return (
+    <Band id="islamic-house" lattice rosettes="both" decor="right" light lightTone="gold" lightAt="bottom-right">
+      <SectionCopy data={data} sectionKey="islamicHouse" />
+      {/* tasbih swaying quietly in the margin */}
+      <Parallax speed={0.16} style={{ top: 90, right: "2%" }}>
+        <Tasbih height={230} opacity={0.32} color="var(--rosette)" />
+      </Parallax>
+      <div style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 26,
+        alignItems: "start" }} className="house-grid">
+        <div>
+          {h.body && (
+            <Reveal variant="up" distance={18}>
+              <div style={{ color: "var(--text-muted)", fontSize: 15.5, lineHeight: 1.75,
+                marginBottom: 22 }}>
+                <Markdown text={h.body} style={{ margin: "0 0 14px" }} />
+              </div>
+            </Reveal>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))",
+            gap: 14 }}>
+            {(h.features || []).map((f, n) => (
+              <Reveal key={f.id} delay={n * 80} variant="rise" distance={22}>
+                <div className="lift" style={{ ...card, padding: "18px 20px", height: "100%" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <Star8 size={13} />
+                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700,
+                      color: "var(--accent)" }}>{f.title}</h4>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)",
+                    lineHeight: 1.6 }}>{f.text}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+
+        {/* Info card */}
+        <Reveal variant="right" distance={26} delay={140} duration={DUR.slow}>
+          <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+            <div style={{ background: GRAD_DEEP, color: "#fff", padding: "20px 22px",
+              position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", right: -26, top: -26, opacity: .18 }}>
+                <Star8 size={110} color="#fff" /></div>
+              <div style={{ position: "relative" }}>
+                <div style={{ fontSize: 12, letterSpacing: "1.5px", textTransform: "uppercase",
+                  color: "rgba(255,255,255,.72)" }}>Visit</div>
+                <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }}>Islamic House</div>
+              </div>
+            </div>
+            <div style={{ marginTop: -1 }}>
+              <Muqarnas color={GOLD} height={14} cells={12} opacity={.85} />
+            </div>
+            <div style={{ padding: "18px 22px", display: "grid", gap: 14 }}>
+              {h.address && (
+                <div style={{ display: "flex", gap: 10 }}>
+                  <MapPin size={17} color="var(--accent)" style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.55 }}>
+                    {h.address}</div>
+                </div>
+              )}
+              {h.hours && (
+                <div style={{ display: "flex", gap: 10 }}>
+                  <Clock size={17} color="var(--accent)" style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.55 }}>
+                    {h.hours}</div>
+                </div>
+              )}
+              <div style={{ display: "grid", gap: 9, marginTop: 4 }}>
+                {h.mapUrl && (
+                  <a className="btn" href={h.mapUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ ...btnPurple, textDecoration: "none", textAlign: "center",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                    <MapPin size={15} /> Open in Maps
+                  </a>
+                )}
+                {h.donateUrl && (
+                  <a className="btn" href={h.donateUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ ...btnGold, textDecoration: "none", textAlign: "center",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                    <Heart size={15} /> Support the House
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </Reveal>
+      </div>
+
+      {/* Photos */}
+      {(h.photos || []).length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
+          gap: 14, marginTop: 26 }}>
+          {h.photos.map((p, n) => (
+            <Reveal key={p.id ?? n} delay={n * 70} variant="scale" distance={20}>
+              <div className="zoomable" style={{ ...card, padding: 0, overflow: "hidden",
+                aspectRatio: "4 / 3" }}>
+                {p.img
+                  ? <img src={p.img} alt={p.caption || ""} loading="lazy"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  : <div style={{ width: "100%", height: "100%",
+                      background: `linear-gradient(140deg, ${PURPLE_D}, ${VIOLET})` }} />}
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      )}
+      <style>{`@media (max-width:880px){.house-grid{grid-template-columns:1fr !important;}}`}</style>
+    </Band>
+  );
+}
+
+/* ---------- CONTACT ---------- */
+function ContactSection({ data }) {
+  const c = data.contact || seed.contact;
+  const socials = (data.links || []).filter((l) =>
+    ["instagram", "discord", "facebook"].includes(l.kind));
+  return (
+    <Band id="contact" alt lattice rosettes="wide" decor="left" light lightTone="rose" lightAt="top-right">
+      <SectionCopy data={data} sectionKey="contact" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+        gap: 18 }}>
+        <Reveal variant="rise" distance={26}>
+          <a className="lift" href={`mailto:${c.email}`}
+            style={{ ...card, padding: "26px 24px", display: "block", textDecoration: "none",
+              height: "100%" }}>
+            <div style={{ width: 50, height: 50, borderRadius: 13, display: "grid",
+              placeItems: "center", background: `linear-gradient(135deg, ${PURPLE}, ${VIOLET})`,
+              marginBottom: 14 }}>
+              <Mail size={22} color="#fff" />
+            </div>
+            <h3 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700,
+              color: "var(--accent)" }}>Email us</h3>
+            <div style={{ fontSize: 15.5, fontWeight: 600, color: "var(--text)" }}>{c.email}</div>
+            {c.note && (
+              <p style={{ margin: "10px 0 0", fontSize: 13.5, color: "var(--text-muted)",
+                lineHeight: 1.6 }}>{c.note}</p>
+            )}
+          </a>
+        </Reveal>
+
+        {socials.map((l, n) => (
+          <Reveal key={l.id} delay={(n + 1) * 80} variant="rise" distance={26}>
+            <LinkCard link={l} bg={socialBg(l.kind)} />
+          </Reveal>
+        ))}
+      </div>
+    </Band>
+  );
+}
+
+const socialBg = (k) => ({
+  discord: "#5865F2",
+  instagram: "linear-gradient(135deg,#833AB4,#FD1D1D,#FCB045)",
+  facebook: "#1877F2",
+}[k] || PURPLE);
 
 /* ---------- BOARD MEMBERS ---------- */
 /* Compact revolving carousel, deliberately smaller in scale than the main
@@ -2220,7 +3226,7 @@ function BoardSection({ data }) {
   const switchTab = (t) => { if (t !== tab) setTab(t); };
 
   return (
-    <Band id="board" alt lattice rosettes="right" decor="left">
+    <Band id="board" alt lattice rosettes="right" decor="left" light lightTone="rose" lightAt="bottom-left">
       <SectionCopy data={data} sectionKey="board" />
 
       {/* Tabs — the active pill slides between options */}
@@ -2398,10 +3404,10 @@ function BoardCard({ member: m, delay = 0, active, onOpen }) {
 /* ---------- PROGRAMS ---------- */
 function ProgramsSection({ data }) {
   return (
-    <Band id="programs" alt divider lattice decor="right" rosettes="left">
+    <Band id="programs" alt divider lattice decor="right" rosettes="left" light lightTone="violet" lightAt="bottom-right">
       <SectionCopy data={data} sectionKey="programs" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 20 }}>
-        {data.programs.map((p, n) => (
+        {(data.programs || []).map((p, n) => (
           <Reveal key={p.id} delay={n * 85} variant="rise" distance={30} duration={DUR.slow}>
             <ProgramCard program={p} />
           </Reveal>
@@ -2444,10 +3450,10 @@ function ConnectSection({ data }) {
     facebook: "#1877F2", donate: `linear-gradient(135deg,${PURPLE},${GOLD})`, link: PURPLE,
   }[k] || PURPLE);
   return (
-    <Band id="connect" lattice decor="left" rosettes="wide">
+    <Band id="connect" lattice decor="left" rosettes="wide" light lightTone="rose" lightAt="top-left">
       <SectionCopy data={data} sectionKey="connect" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 16 }}>
-        {data.links.map((l, n) => (
+        {(data.links || []).map((l, n) => (
           <Reveal key={l.id} delay={n * 65} variant="rise" distance={26}>
             <LinkCard link={l} bg={bg(l.kind)} />
           </Reveal>
@@ -2488,34 +3494,167 @@ function LinkCard({ link: l, bg }) {
   );
 }
 
-function Footer({ onAdmin }) {
+function Footer({ onAdmin, data, onNav }) {
+  const links = data?.links || [];
+  const contact = data?.contact || seed.contact;
+  const donate = data?.donate || seed.donate;
+  const find = (kind, match) => links.find((l) =>
+    l.kind === kind && (!match || new RegExp(match, "i").test(l.name || "")));
+  const instagram = find("instagram");
+  const discord = find("discord");
+  const facebook = find("facebook");
+
+  const socials = [
+    instagram && { key: "ig", href: instagram.href, label: "Instagram", Icon: Instagram },
+    discord && { key: "dc", href: discord.href, label: "Discord", Icon: MessageCircle },
+    facebook && { key: "fb", href: facebook.href, label: "Facebook", Icon: Facebook },
+    { key: "mail", href: `mailto:${contact.email}`, label: "Email", Icon: Mail },
+  ].filter(Boolean);
+
+  const columns = [
+    { title: "Explore", items: [
+      { label: "About", id: "about" },
+      { label: "Events", id: "events" },
+      { label: "Programs", id: "programs" },
+      { label: "Prayer", id: "prayer" },
+    ]},
+    { title: "Community", items: [
+      { label: "Board", id: "board" },
+      { label: "Islamic House", id: "islamic-house" },
+      { label: "Announcements", id: "announcements" },
+      { label: "Connect", id: "connect" },
+    ]},
+    { title: "Support", items: [
+      { label: "Donate to MSA", href: donate.msaUrl },
+      { label: "Support Islamic House", href: donate.houseUrl },
+      { label: "Sponsors", id: "sponsors" },
+      { label: "Contact", id: "contact" },
+    ]},
+  ];
+
   return (
-    <footer style={{ background: INK, color: "rgba(255,255,255,.72)", padding: 0 }}>
-      <GirihBand color={`rgba(201,182,136,.35)`} height={34} opacity={1} unit={48} />
-      <div style={{ padding: "40px 20px 36px" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", justifyContent: "space-between",
-          alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo"
-              style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover",
-                border: "1px solid rgba(201,182,136,.3)" }} />
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>MSA at UW</div>
-              <div style={{ fontSize: 13 }}>Muslim Student Association · University of Washington</div>
+    <footer style={{ background: INK, color: "rgba(255,255,255,.72)", padding: 0,
+      position: "relative", overflow: "hidden" }}>
+      <GirihBand color="rgba(201,182,136,.35)" height={34} opacity={1} unit={48} />
+      <div aria-hidden="true" style={{ position: "absolute", top: "20%", right: "-4%",
+        pointerEvents: "none", zIndex: 0 }}>
+        <ScrollSpin speed={-16}>
+          <Rosette points={12} skip={5} size={280} color={GOLD} opacity={0.07} />
+        </ScrollSpin>
+      </div>
+
+      <div style={{ position: "relative", zIndex: 1, padding: "48px 20px 30px" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid",
+          gridTemplateColumns: "1.4fr repeat(3, 1fr)", gap: 34 }} className="foot-grid">
+
+          {/* Brand + socials */}
+          <div>
+            <button onClick={() => onNav?.("home")} style={{ display: "flex", alignItems: "center",
+              gap: 12, background: "none", border: "none", padding: 0, cursor: "pointer",
+              marginBottom: 14 }}>
+              <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo"
+                style={{ width: 44, height: 44, borderRadius: 11, objectFit: "cover",
+                  border: "1px solid rgba(201,182,136,.3)" }} />
+              <span style={{ fontWeight: 800, fontSize: 17, color: "#fff", letterSpacing: "-.3px" }}>
+                MSA <span style={{ color: GOLD }}>UW</span>
+              </span>
+            </button>
+            <p style={{ margin: "0 0 18px", fontSize: 13.5, lineHeight: 1.7, maxWidth: 300 }}>
+              A home for Muslim students at the University of Washington — worship,
+              learning, friendship, and service since 1968.
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {socials.map(({ key, href, label, Icon }) => (
+                <a key={key} href={href}
+                  target={href.startsWith("mailto:") ? undefined : "_blank"}
+                  rel={href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+                  aria-label={label} title={label} className="socialbtn">
+                  <Icon size={17} />
+                </a>
+              ))}
             </div>
           </div>
-          <button className="btn" onClick={onAdmin} style={{ display: "flex", alignItems: "center", gap: 7,
-            background: "rgba(201,182,136,.14)", border: "1px solid rgba(201,182,136,.3)", color: GOLD,
-            padding: "10px 16px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
-            fontSize: 14, fontWeight: 600 }}>
-            <Lock size={15} /> Admin login
-          </button>
+
+          {/* Link columns */}
+          {columns.map((col) => (
+            <div key={col.title}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: "1.6px",
+                textTransform: "uppercase", color: "rgba(255,255,255,.5)", marginBottom: 14 }}>
+                {col.title}</div>
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 9 }}>
+                {col.items.map((it) => (
+                  <li key={it.label}>
+                    {it.href ? (
+                      <a href={it.href} target="_blank" rel="noopener noreferrer" className="footlink">
+                        {it.label}
+                      </a>
+                    ) : (
+                      <button onClick={() => onNav?.(it.id)} className="footlink"
+                        style={{ background: "none", border: "none", padding: 0,
+                          cursor: "pointer", fontFamily: "inherit" }}>
+                        {it.label}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
-        <div style={{ maxWidth: 1200, margin: "28px auto 0", paddingTop: 20,
-          borderTop: "1px solid rgba(255,255,255,.12)", fontSize: 13 }}>
-          © {new Date().getFullYear()} MSA at UW. Built with care for the community.
+
+        {/* Donate strip */}
+        <div style={{ maxWidth: 1200, margin: "34px auto 0" }}>
+          <a className="btn" href={donate.msaUrl} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
+              padding: "14px 22px", borderRadius: 12, textDecoration: "none",
+              fontWeight: 700, fontSize: 15, color: "#2c2418",
+              background: `linear-gradient(120deg, ${GOLD}, #e0cf9f)` }}>
+            <Heart size={17} /> Give today
+          </a>
+        </div>
+
+        {/* Bottom bar */}
+        <div style={{ maxWidth: 1200, margin: "26px auto 0", paddingTop: 20,
+          borderTop: "1px solid rgba(255,255,255,.12)", display: "flex",
+          alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap",
+          fontSize: 12.5 }}>
+          <div>
+            © {new Date().getFullYear()} Muslim Students Association at the University of
+            Washington. A registered UW Registered Student Organization.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+            <a href={`mailto:${contact.email}`} className="footlink">{contact.email}</a>
+            <button onClick={onAdmin} className="footlink"
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Lock size={13} /> Admin
+            </button>
+          </div>
         </div>
       </div>
+
+      <style>{`
+        .footlink { color: rgba(255,255,255,.72); text-decoration: none; font-size: 13.5;
+                    transition: color ${DUR.fast}ms ${EASE.out}, transform ${DUR.fast}ms ${EASE.out};
+                    display: inline-block; }
+        .footlink:hover { color: ${GOLD}; transform: translateX(2px); }
+        .socialbtn { width: 38px; height: 38px; border-radius: 11px; display: grid;
+                     place-items: center; color: rgba(255,255,255,.82);
+                     background: rgba(255,255,255,.07);
+                     border: 1px solid rgba(255,255,255,.13);
+                     transition: transform ${DUR.fast}ms ${EASE.spring},
+                                 background ${DUR.fast}ms ${EASE.out},
+                                 color ${DUR.fast}ms ${EASE.out},
+                                 border-color ${DUR.fast}ms ${EASE.out}; }
+        .socialbtn:hover { transform: translateY(-3px); color: ${INK};
+                           background: ${GOLD}; border-color: ${GOLD}; }
+        @media (max-width: 860px) {
+          .foot-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+        @media (max-width: 560px) {
+          .foot-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </footer>
   );
 }
@@ -2600,9 +3739,13 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
               overflowY: "auto", background: "var(--surface-2)" }}>
               {[
                 ["hero", "Home / Hero"], ["copy", "Section text"],
+                ["announce", "Announcements"], ["about", "About"],
+                ["donate", "Donate"], ["house", "Islamic House"],
                 ["gallery", "Photos"], ["sponsors", "Sponsors"], ["board", "Board members"],
-                ["spaces", "Prayer spaces"], ["times", "Prayer times"], ["events", "Events"],
-                ["programs", "Programs"], ["stats", "Stats"], ["links", "Links"],
+                ["spaces", "Prayer spaces"], ["times", "Prayer times"],
+                ["events", "Events"], ["calendar", "Calendar"],
+                ["programs", "Programs"], ["stats", "Stats"],
+                ["links", "Links"], ["contact", "Contact"],
               ].map(([k, lbl]) => (
                 <button key={k} onClick={() => setTab(k)} style={{ display: "block", width: "100%",
                   textAlign: "left", padding: "10px 12px", borderRadius: 9, border: "none",
@@ -2771,9 +3914,11 @@ function Editor({ tab, data, setData }) {
 
   if (tab === "copy") {
     const SECTION_KEYS = [
-      ["gallery", "Photo gallery"], ["sponsors", "Sponsors"], ["board", "Board members"],
-      ["prayer", "Prayer"], ["events", "Events"], ["programs", "Programs"],
-      ["connect", "Connect"], ["donate", "Donate banner"],
+      ["about", "About"], ["announcements", "Announcements"], ["donate", "Donate"],
+      ["islamicHouse", "Islamic House"], ["gallery", "Photo gallery"],
+      ["sponsors", "Sponsors"], ["board", "Board members"], ["prayer", "Prayer"],
+      ["events", "Events"], ["programs", "Programs"], ["connect", "Connect"],
+      ["contact", "Contact"],
     ];
     const sections = data.sections || {};
     const setSection = (key, patch) => up({
@@ -2904,6 +4049,327 @@ function Editor({ tab, data, setData }) {
     );
   }
 
+  if (tab === "announce") {
+    const items = data.announcements || [];
+    const set = (next) => up({ announcements: next });
+    const edit = (i, patch) => { const c = [...items]; c[i] = { ...c[i], ...patch }; set(c); };
+    return (
+      <Section title="Announcements">
+        <p style={{ margin: "-8px 0 16px", fontSize: 13, color: "var(--text-faint)", lineHeight: 1.6 }}>
+          Shown directly below the hero. Pinned items appear first. Leave the date blank to hide it.
+        </p>
+        <button className="btn" onClick={() => set([...items, { id: Date.now(), kind: "notice",
+          title: "New announcement", body: "", date: "", pinned: false, href: "" }])}
+          style={{ ...btnPurple, marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Plus size={16} /> Add announcement</button>
+        <div style={{ display: "grid", gap: 14 }}>
+          {items.length === 0 && (
+            <div style={{ color: "var(--text-faint)", fontSize: 13, padding: 10, textAlign: "center",
+              border: "1px dashed var(--border)", borderRadius: 10 }}>None yet</div>
+          )}
+          {items.map((a, i) => (
+            <div key={a.id} style={{ border: "1px solid var(--border)", borderRadius: 12,
+              padding: 14, display: "grid", gap: 8, position: "relative" }}>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+                <div>
+                  <label style={lbl}>Type</label>
+                  <select style={inpSm} value={a.kind || "notice"}
+                    onChange={(e) => edit(i, { kind: e.target.value })}>
+                    <option value="notice">Notice</option>
+                    <option value="deadline">Deadline</option>
+                    <option value="event">Event update</option>
+                    <option value="ramadan">Ramadan</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={lbl}>Date label (optional)</label>
+                  <input style={inpSm} placeholder="e.g. Fri 12 Sep" value={a.date || ""}
+                    onChange={(e) => edit(i, { date: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Title</label>
+                <input style={inpSm} value={a.title || ""}
+                  onChange={(e) => edit(i, { title: e.target.value })} />
+              </div>
+              <div>
+                <label style={lbl}>Body</label>
+                <textarea style={{ ...inpSm, minHeight: 68, resize: "vertical" }} value={a.body || ""}
+                  onChange={(e) => edit(i, { body: e.target.value })} />
+              </div>
+              <div>
+                <label style={lbl}>Link (optional)</label>
+                <input style={inpSm} placeholder="https://…" value={a.href || ""}
+                  onChange={(e) => edit(i, { href: e.target.value })} />
+              </div>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 8,
+                fontSize: 13, color: "var(--text-soft)", cursor: "pointer" }}>
+                <input type="checkbox" checked={!!a.pinned}
+                  onChange={(e) => edit(i, { pinned: e.target.checked })} />
+                Pin to the top
+              </label>
+              <button onClick={() => set(items.filter((_, n) => n !== i))}
+                style={{ ...delBtn, position: "absolute", top: 10, right: 10 }}
+                aria-label="Delete announcement"><Trash2 size={15} /></button>
+            </div>
+          ))}
+        </div>
+      </Section>
+    );
+  }
+
+  if (tab === "about") {
+    const about = data.about || seed.about;
+    const setAbout = (patch) => up({ about: { ...about, ...patch } });
+    const pillars = about.pillars || [];
+    const editP = (i, patch) => {
+      const c = [...pillars]; c[i] = { ...c[i], ...patch }; setAbout({ pillars: c });
+    };
+    return (
+      <Section title="About section">
+        <Field label="Intro paragraph">
+          <textarea style={{ ...inp, minHeight: 90 }} value={about.intro || ""}
+            onChange={(e) => setAbout({ intro: e.target.value })} />
+        </Field>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          margin: "6px 0 10px" }}>
+          <h4 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "var(--accent)" }}>Pillars</h4>
+          <button onClick={() => setAbout({ pillars: [...pillars, { id: Date.now(),
+            icon: "star", title: "New pillar", text: "" }] })} style={miniBtn}>
+            <Plus size={14} /> Add</button>
+        </div>
+        <div style={{ display: "grid", gap: 14 }}>
+          {pillars.map((p, i) => (
+            <div key={p.id} style={{ border: "1px solid var(--border)", borderRadius: 12,
+              padding: 14, display: "grid", gap: 8, position: "relative" }}>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+                <div>
+                  <label style={lbl}>Title</label>
+                  <input style={inpSm} value={p.title || ""}
+                    onChange={(e) => editP(i, { title: e.target.value })} />
+                </div>
+                <div>
+                  <label style={lbl}>Icon</label>
+                  <select style={inpSm} value={p.icon || "star"}
+                    onChange={(e) => editP(i, { icon: e.target.value })}>
+                    {["star","book","grad","sparkles","hand","users"].map((k) =>
+                      <option key={k} value={k}>{k}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Text</label>
+                <textarea style={{ ...inpSm, minHeight: 64, resize: "vertical" }} value={p.text || ""}
+                  onChange={(e) => editP(i, { text: e.target.value })} />
+              </div>
+              <button onClick={() => setAbout({ pillars: pillars.filter((_, n) => n !== i) })}
+                style={{ ...delBtn, position: "absolute", top: 10, right: 10 }}
+                aria-label="Delete pillar"><Trash2 size={15} /></button>
+            </div>
+          ))}
+        </div>
+      </Section>
+    );
+  }
+
+  if (tab === "donate") {
+    const d = data.donate || seed.donate;
+    const setD = (patch) => up({ donate: { ...d, ...patch } });
+    const impact = d.impact || [];
+    const editI = (i, patch) => {
+      const c = [...impact]; c[i] = { ...c[i], ...patch }; setD({ impact: c });
+    };
+    return (
+      <Section title="Donations">
+        <Field label="MSA donation URL">
+          <input style={inp} value={d.msaUrl || ""}
+            onChange={(e) => setD({ msaUrl: e.target.value })} />
+        </Field>
+        <Field label="Islamic House donation URL">
+          <input style={inp} value={d.houseUrl || ""}
+            onChange={(e) => setD({ houseUrl: e.target.value })} />
+        </Field>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          margin: "6px 0 10px" }}>
+          <h4 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "var(--accent)" }}>
+            Impact tiers</h4>
+          <button onClick={() => setD({ impact: [...impact, { id: Date.now(),
+            amount: "$25", text: "" }] })} style={miniBtn}><Plus size={14} /> Add</button>
+        </div>
+        <div style={{ display: "grid", gap: 12 }}>
+          {impact.map((t, i) => (
+            <div key={t.id} style={{ border: "1px solid var(--border)", borderRadius: 12,
+              padding: 14, display: "grid", gap: 8, gridTemplateColumns: "110px 1fr auto",
+              alignItems: "end" }}>
+              <div>
+                <label style={lbl}>Amount</label>
+                <input style={inpSm} value={t.amount || ""}
+                  onChange={(e) => editI(i, { amount: e.target.value })} />
+              </div>
+              <div>
+                <label style={lbl}>What it covers</label>
+                <input style={inpSm} value={t.text || ""}
+                  onChange={(e) => editI(i, { text: e.target.value })} />
+              </div>
+              <button onClick={() => setD({ impact: impact.filter((_, n) => n !== i) })}
+                style={delBtn} aria-label="Delete tier"><Trash2 size={15} /></button>
+            </div>
+          ))}
+        </div>
+      </Section>
+    );
+  }
+
+  if (tab === "house") {
+    const h = data.islamicHouse || seed.islamicHouse;
+    const setH = (patch) => up({ islamicHouse: { ...h, ...patch } });
+    const feats = h.features || [];
+    const photos = h.photos || [];
+    const editF = (i, patch) => { const c = [...feats]; c[i] = { ...c[i], ...patch }; setH({ features: c }); };
+    const editPh = (i, patch) => { const c = [...photos]; c[i] = { ...c[i], ...patch }; setH({ photos: c }); };
+    return (
+      <Section title="Islamic House">
+        <Field label="Address"><input style={inp} value={h.address || ""}
+          onChange={(e) => setH({ address: e.target.value })} /></Field>
+        <Field label="Google Maps link (optional)"><input style={inp} value={h.mapUrl || ""}
+          placeholder="https://maps.google.com/…"
+          onChange={(e) => setH({ mapUrl: e.target.value })} /></Field>
+        <Field label="Hours / prayer note"><input style={inp} value={h.hours || ""}
+          onChange={(e) => setH({ hours: e.target.value })} /></Field>
+        <Field label="Description"><textarea style={{ ...inp, minHeight: 110 }} value={h.body || ""}
+          onChange={(e) => setH({ body: e.target.value })} /></Field>
+        <Field label="Donation URL"><input style={inp} value={h.donateUrl || ""}
+          onChange={(e) => setH({ donateUrl: e.target.value })} /></Field>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          margin: "10px 0" }}>
+          <h4 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "var(--accent)" }}>Highlights</h4>
+          <button onClick={() => setH({ features: [...feats, { id: Date.now(), title: "New", text: "" }] })}
+            style={miniBtn}><Plus size={14} /> Add</button>
+        </div>
+        <div style={{ display: "grid", gap: 12 }}>
+          {feats.map((f, i) => (
+            <div key={f.id} style={{ border: "1px solid var(--border)", borderRadius: 12,
+              padding: 14, display: "grid", gap: 8, position: "relative" }}>
+              <div><label style={lbl}>Title</label>
+                <input style={inpSm} value={f.title || ""}
+                  onChange={(e) => editF(i, { title: e.target.value })} /></div>
+              <div><label style={lbl}>Text</label>
+                <input style={inpSm} value={f.text || ""}
+                  onChange={(e) => editF(i, { text: e.target.value })} /></div>
+              <button onClick={() => setH({ features: feats.filter((_, n) => n !== i) })}
+                style={{ ...delBtn, position: "absolute", top: 10, right: 10 }}
+                aria-label="Delete highlight"><Trash2 size={15} /></button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          margin: "16px 0 10px" }}>
+          <h4 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "var(--accent)" }}>Photos</h4>
+          <button onClick={() => setH({ photos: [...photos, { id: Date.now(), img: "", caption: "" }] })}
+            style={miniBtn}><Plus size={14} /> Add</button>
+        </div>
+        <div style={{ display: "grid", gap: 12 }}>
+          {photos.map((p, i) => (
+            <div key={p.id} style={{ border: "1px solid var(--border)", borderRadius: 12,
+              padding: 14, display: "grid", gap: 8, position: "relative" }}>
+              <ImageField label="Photo" value={p.img || ""} folder="house"
+                onChange={(url) => editPh(i, { img: url })} />
+              <div><label style={lbl}>Caption (optional)</label>
+                <input style={inpSm} value={p.caption || ""}
+                  onChange={(e) => editPh(i, { caption: e.target.value })} /></div>
+              <button onClick={() => setH({ photos: photos.filter((_, n) => n !== i) })}
+                style={{ ...delBtn, position: "absolute", top: 10, right: 10 }}
+                aria-label="Delete photo"><Trash2 size={15} /></button>
+            </div>
+          ))}
+        </div>
+      </Section>
+    );
+  }
+
+  if (tab === "calendar") {
+    const items = data.calendar || [];
+    const set = (next) => up({ calendar: next });
+    const edit = (i, patch) => { const c = [...items]; c[i] = { ...c[i], ...patch }; set(c); };
+    const sorted = [...items].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    return (
+      <Section title="Dated events (monthly calendar)">
+        <p style={{ margin: "-8px 0 16px", fontSize: 13, color: "var(--text-faint)", lineHeight: 1.6 }}>
+          These appear in the monthly calendar view. The weekly view is edited on the Events tab.
+        </p>
+        <button className="btn" onClick={() => set([...items, { id: Date.now(),
+          date: new Date().toISOString().slice(0, 10), name: "New event",
+          time: "", loc: "", desc: "" }])}
+          style={{ ...btnPurple, marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Plus size={16} /> Add dated event</button>
+        <div style={{ display: "grid", gap: 14 }}>
+          {items.length === 0 && (
+            <div style={{ color: "var(--text-faint)", fontSize: 13, padding: 10, textAlign: "center",
+              border: "1px dashed var(--border)", borderRadius: 10 }}>No dated events yet</div>
+          )}
+          {items.map((e, i) => (
+            <div key={e.id} style={{ border: "1px solid var(--border)", borderRadius: 12,
+              padding: 14, display: "grid", gap: 8, position: "relative" }}>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+                <div><label style={lbl}>Date</label>
+                  <input type="date" style={inpSm} value={e.date || ""}
+                    onChange={(ev) => edit(i, { date: ev.target.value })} /></div>
+                <div><label style={lbl}>Time</label>
+                  <input style={inpSm} placeholder="6:00 PM" value={e.time || ""}
+                    onChange={(ev) => edit(i, { time: ev.target.value })} /></div>
+              </div>
+              <div><label style={lbl}>Name</label>
+                <input style={inpSm} value={e.name || ""}
+                  onChange={(ev) => edit(i, { name: ev.target.value })} /></div>
+              <div><label style={lbl}>Location</label>
+                <input style={inpSm} value={e.loc || ""}
+                  onChange={(ev) => edit(i, { loc: ev.target.value })} /></div>
+              <div><label style={lbl}>Description (optional)</label>
+                <input style={inpSm} value={e.desc || ""}
+                  onChange={(ev) => edit(i, { desc: ev.target.value })} /></div>
+              <button onClick={() => set(items.filter((_, n) => n !== i))}
+                style={{ ...delBtn, position: "absolute", top: 10, right: 10 }}
+                aria-label="Delete event"><Trash2 size={15} /></button>
+            </div>
+          ))}
+        </div>
+      </Section>
+    );
+  }
+
+  if (tab === "contact") {
+    const c = data.contact || seed.contact;
+    const setC = (patch) => up({ contact: { ...c, ...patch } });
+    const extra = data.eventsExtra || seed.eventsExtra;
+    const setE = (patch) => up({ eventsExtra: { ...extra, ...patch } });
+    return (
+      <Section title="Contact & suggestions">
+        <Field label="Contact email">
+          <input style={inp} value={c.email || ""}
+            onChange={(e) => setC({ email: e.target.value })} />
+        </Field>
+        <Field label="Note under the email">
+          <textarea style={{ ...inp, minHeight: 70 }} value={c.note || ""}
+            onChange={(e) => setC({ note: e.target.value })} />
+        </Field>
+        <div style={{ height: 1, background: "var(--border)", margin: "18px 0" }} />
+        <Field label="“Suggest an event” form URL (Google Form or similar)">
+          <input style={inp} placeholder="https://forms.gle/…" value={extra.suggestUrl || ""}
+            onChange={(e) => setE({ suggestUrl: e.target.value })} />
+        </Field>
+        <Field label="Suggestion prompt text">
+          <input style={inp} value={extra.suggestNote || ""}
+            onChange={(e) => setE({ suggestNote: e.target.value })} />
+        </Field>
+        <p style={{ fontSize: 12.5, color: "var(--text-faint)", lineHeight: 1.6 }}>
+          With no form URL set, the suggestion button opens an email to the address above instead.
+        </p>
+      </Section>
+    );
+  }
+
   if (tab === "stats")
     return (
       <ListEditor title="Stats" items={data.stats || []}
@@ -2922,6 +4388,8 @@ function Editor({ tab, data, setData }) {
 
   return null;
 }
+
+const lbl = { fontSize: 12, fontWeight: 600, color: "var(--text-faint)" };
 
 function Section({ title, children }) {
   return (
