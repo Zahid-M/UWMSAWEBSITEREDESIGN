@@ -4,7 +4,8 @@ import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
   Lock, LogOut, Plus, Trash2, Edit3, ChevronLeft, ChevronRight,
-  Home, Star, HandHeart, GraduationCap, Sparkles, ExternalLink, Save
+  Home, Star, HandHeart, GraduationCap, Sparkles, ExternalLink, Save,
+  Sun, Moon
 } from "lucide-react";
 
 /* ============================================================
@@ -306,50 +307,92 @@ function TextReveal({ text, delay = 0, step = 42, duration = DUR.slow,
 }
 
 
-/* ── Cherry blossoms ────────────────────────────────────────────────────
-   Petals drifting down behind the hero content. Pure CSS animation on a
-   handful of SVG petals — cheap, and skipped for reduced-motion users. */
-function Petal({ color, size = 14 }) {
+/* ── Sakura wind (canvas) ───────────────────────────────────────────────
+   Petals drift across the whole viewport and react to scroll: scrolling
+   kicks up a gust that pushes them sideways and speeds their fall, then
+   decays back to a calm breeze. Canvas keeps it cheap even at 40+ petals.
+   Skipped entirely for reduced-motion users. */
+function SakuraWind({ dark }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w = window.innerWidth, h = window.innerHeight;
+    const size = () => {
+      w = window.innerWidth; h = window.innerHeight;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      canvas.style.width = w + "px"; canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    size();
+
+    const COUNT = w < 700 ? 20 : 38;
+    const colors = dark
+      ? ["rgba(216,168,214,.85)", "rgba(180,120,140,.8)", "rgba(140,120,180,.75)"]
+      : ["rgba(180,120,140,.8)", "rgba(200,150,175,.75)", "rgba(140,105,180,.6)"];
+
+    const spawn = (fromTop) => ({
+      x: Math.random() * w,
+      y: fromTop ? -20 - Math.random() * h : Math.random() * h,
+      size: 5 + Math.random() * 9,
+      vy: 0.5 + Math.random() * 1,
+      vx: -0.4 + Math.random() * 0.8,
+      rot: Math.random() * 360,
+      vrot: -4 + Math.random() * 8,
+      sway: Math.random() * Math.PI * 2,
+      swaySpeed: 0.01 + Math.random() * 0.02,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    });
+    let petals = Array.from({ length: COUNT }, () => spawn(false));
+
+    let lastY = window.scrollY;
+    let gust = 0;   // horizontal wind, driven by scroll velocity
+    let gustV = 0;  // extra downward push while scrolling
+    const onScroll = () => {
+      const y = window.scrollY;
+      const delta = y - lastY;
+      lastY = y;
+      gust = Math.max(-55, Math.min(55, gust + delta * 1.4));
+      gustV = Math.min(30, gustV + Math.abs(delta) * 0.6);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", size, { passive: true });
+
+    let raf;
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h);
+      gust *= 0.945;   // decay back to a calm breeze
+      gustV *= 0.92;
+      for (const p of petals) {
+        p.sway += p.swaySpeed;
+        p.x += p.vx + gust * 0.055 + Math.sin(p.sway) * 0.7;
+        p.y += p.vy + gustV * 0.05;
+        p.rot += p.vrot + gust * 0.3;
+        if (p.y > h + 20 || p.x < -30 || p.x > w + 30) Object.assign(p, spawn(true));
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rot * Math.PI) / 180);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, p.size * 0.42, p.size, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", size);
+    };
+  }, [dark]);
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 2 C14.5 6, 18 7, 20.5 6.5 C19.5 10, 20 13.5, 22 16 C18.5 16.5, 15.5 18.5, 14 22 C13 18.5, 12 17, 12 17 C12 17, 11 18.5, 10 22 C8.5 18.5, 5.5 16.5, 2 16 C4 13.5, 4.5 10, 3.5 6.5 C6 7, 9.5 6, 12 2 Z"
-        fill={color} opacity="0.85" />
-    </svg>
-  );
-}
-function CherryBlossoms({ count = 16 }) {
-  const [on, setOn] = useState(true);
-  useEffect(() => { setOn(!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }, []);
-  const petals = React.useMemo(() => {
-    const colors = [PINK, MAUVE, "#e8c4d4", GOLD];
-    return Array.from({ length: count }, (_, i) => ({
-      id: i, left: (i * 97) % 100, size: 10 + ((i * 7) % 12),
-      duration: 9 + ((i * 3) % 8), delay: -((i * 13) % 16),
-      drift: (i % 2 === 0 ? 1 : -1) * (20 + (i * 11) % 50),
-      color: colors[i % colors.length], spin: (i % 2 === 0 ? 1 : -1) * (180 + (i * 37) % 360),
-    }));
-  }, [count]);
-  if (!on) return null;
-  return (
-    <div aria-hidden="true" style={{ position: "absolute", inset: 0, overflow: "hidden",
-      pointerEvents: "none", zIndex: 1 }}>
-      <style>{`
-        @keyframes petalFall {
-          0% { transform: translate3d(0,-12%,0) rotate(0deg); opacity: 0; }
-          8% { opacity: .9; } 92% { opacity: .75; }
-          100% { transform: translate3d(var(--drift),112%,0) rotate(var(--spin)); opacity: 0; }
-        }
-        .petal { position:absolute; top:0; animation-name:petalFall;
-                 animation-timing-function:linear; animation-iteration-count:infinite; }
-      `}</style>
-      {petals.map((p) => (
-        <span key={p.id} className="petal" style={{ left: `${p.left}%`,
-          animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s`,
-          "--drift": `${p.drift}px`, "--spin": `${p.spin}deg` }}>
-          <Petal color={p.color} size={p.size} />
-        </span>
-      ))}
-    </div>
+    <canvas ref={canvasRef} aria-hidden="true"
+      style={{ position: "fixed", inset: 0, zIndex: 40, pointerEvents: "none" }} />
   );
 }
 
@@ -638,6 +681,22 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Theme — remembers the visitor's choice, otherwise follows their OS setting.
+  const [dark, setDark] = useState(() => {
+    try {
+      const saved = localStorage.getItem("msa-theme");
+      if (saved) return saved === "dark";
+    } catch {}
+    return typeof window !== "undefined" &&
+      !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  });
+  useEffect(() => {
+    try { localStorage.setItem("msa-theme", dark ? "dark" : "light"); } catch {}
+    // Tell the browser which scheme we're in so form controls and
+    // scrollbars match the theme too.
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  }, [dark]);
+
   // On load: pull saved content from Supabase (fall back to seed if empty),
   // and check whether an admin session is already active.
   useEffect(() => {
@@ -684,10 +743,14 @@ export default function App() {
   }, [loaded]);
 
   return (
-    <div style={{ fontFamily: "'Poppins', system-ui, sans-serif", color: "#1f1a2e", background: "#faf9fc" }}>
+    <div data-theme={dark ? "dark" : "light"}
+      style={{ fontFamily: "'Poppins', system-ui, sans-serif",
+        color: "var(--text)", background: "var(--bg)", minHeight: "100vh" }}>
       <StyleTag />
+      <SakuraWind dark={dark} />
       <Nav active={active} onNav={scrollTo} menuOpen={menuOpen} setMenuOpen={setMenuOpen}
-           onAdmin={() => setAdminOpen(true)} isAdmin={isAdmin} />
+           onAdmin={() => setAdminOpen(true)} isAdmin={isAdmin}
+           dark={dark} onToggleDark={() => setDark((d) => !d)} />
       <main>
         <HomeSection data={data} onNav={scrollTo} />
         <PrayerSection data={data} />
@@ -717,6 +780,51 @@ function StyleTag() {
       html { scroll-behavior: smooth; }
       body { margin: 0; }
 
+      /* ── Theme tokens ───────────────────────────────────────────────────
+         Purple and gold stay constant across both themes — only the
+         surfaces and text shift. Everything reads from these variables so
+         a theme swap never needs component changes. */
+      :root, [data-theme="light"] {
+        --bg: #faf9fc;
+        --surface: #ffffff;
+        --surface-2: #faf9fc;
+        --nav-bg: rgba(255,255,255,.62);
+        --nav-bg-solid: rgba(255,255,255,.86);
+        --text: #2c2640;
+        --text-muted: #5a5468;
+        --text-soft: #4a4458;
+        --text-faint: #8a8498;
+        --border: rgba(75,46,131,.10);
+        --border-strong: rgba(0,0,0,.15);
+        --card-shadow: 0 4px 20px rgba(75,46,131,.06);
+        --card-shadow-hover: 0 22px 48px rgba(75,46,131,.20);
+        --tint: rgba(75,46,131,.05);
+        --tint-2: rgba(75,46,131,.08);
+        --lattice: #5b3d8c;
+      }
+      [data-theme="dark"] {
+        --bg: #120e1a;
+        --surface: #1c1628;
+        --surface-2: #171122;
+        --nav-bg: rgba(18,14,26,.66);
+        --nav-bg-solid: rgba(18,14,26,.90);
+        --text: #f1ecfa;
+        --text-muted: #bcb2d4;
+        --text-soft: #cfc4e6;
+        --text-faint: #948ab0;
+        --border: rgba(201,182,214,.14);
+        --border-strong: rgba(201,182,214,.22);
+        --card-shadow: 0 4px 22px rgba(0,0,0,.34);
+        --card-shadow-hover: 0 22px 52px rgba(0,0,0,.46);
+        --tint: rgba(201,182,214,.06);
+        --tint-2: rgba(201,182,214,.10);
+        --lattice: #c9b6d6;
+      }
+      /* Theme swap eases rather than snapping. */
+      body, #root, [data-theme] {
+        transition: background-color 420ms ${EASE.inOut}, color 420ms ${EASE.inOut};
+      }
+
       /* ── Accessibility: honour reduced-motion everywhere ────────────── */
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
@@ -738,7 +846,7 @@ function StyleTag() {
       .lift { transition: transform ${DUR.fast}ms ${EASE.out},
                           box-shadow ${DUR.fast}ms ${EASE.out}; }
       .lift:hover { transform: translate3d(0,-6px,0);
-                    box-shadow: 0 22px 48px rgba(75,46,131,.20); }
+                    box-shadow: var(--card-shadow-hover); }
       .lift:active { transform: translate3d(0,-2px,0);
                      transition-duration: 90ms; }
 
@@ -772,6 +880,20 @@ function StyleTag() {
         100% { transform: translate3d(0,0,0) scale(1); }
       }
       .glow { animation: glowDrift 22s ${EASE.inOut} infinite; will-change: transform; }
+
+      /* ── Hanging lanterns: pendulum swing + breathing glow ──────────── */
+      @keyframes swing {
+        0%   { transform: rotate(-2.6deg); }
+        50%  { transform: rotate(2.6deg); }
+        100% { transform: rotate(-2.6deg); }
+      }
+      .swing { animation-name: swing; animation-timing-function: ${EASE.inOut};
+               animation-iteration-count: infinite; will-change: transform; }
+      @keyframes lampPulse {
+        0%, 100% { opacity: .55; transform: translate(-50%,-50%) scale(1); }
+        50%      { opacity: 1;   transform: translate(-50%,-50%) scale(1.13); }
+      }
+      .lampglow { animation: lampPulse 5.5s ${EASE.inOut} infinite; }
 
       /* ── Decorative float — for SVG accents ─────────────────────────── */
       @keyframes floatY {
@@ -816,7 +938,7 @@ function StyleTag() {
   );
 }
 
-function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin }) {
+function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark }) {
   const [solid, setSolid] = useState(false);
   const [progress, setProgress] = useState(0);
   // rAF-throttled so scrolling stays at 60fps even on long pages.
@@ -842,11 +964,11 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin }) {
   return (
     <header style={{
       position: "sticky", top: 0, zIndex: 50,
-      background: solid ? "rgba(255,255,255,.86)" : "rgba(255,255,255,.62)",
+      background: solid ? "var(--nav-bg-solid)" : "var(--nav-bg)",
       backdropFilter: `blur(${solid ? 18 : 10}px) saturate(1.6)`,
       WebkitBackdropFilter: `blur(${solid ? 18 : 10}px) saturate(1.6)`,
-      borderBottom: `1px solid ${solid ? "rgba(75,46,131,.10)" : "transparent"}`,
-      boxShadow: solid ? "0 6px 28px rgba(75,46,131,.07)" : "0 0 0 rgba(0,0,0,0)",
+      borderBottom: `1px solid ${solid ? "var(--border)" : "transparent"}`,
+      boxShadow: solid ? "var(--card-shadow)" : "0 0 0 rgba(0,0,0,0)",
       transition: `background ${DUR.base}ms ${EASE.out}, box-shadow ${DUR.base}ms ${EASE.out}, border-color ${DUR.base}ms ${EASE.out}, backdrop-filter ${DUR.base}ms ${EASE.out}`,
     }}>
       {/* Reading progress — a hairline that fills as you scroll */}
@@ -884,9 +1006,21 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin }) {
               </button>
             )
           )}
+          <button className="btn themetoggle" onClick={onToggleDark}
+            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} style={{
+            marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
+            borderRadius: 10, border: `1px solid var(--border-strong)`,
+            background: "var(--surface)", cursor: "pointer", overflow: "hidden" }}>
+            <span style={{ display: "grid", placeItems: "center",
+              transform: dark ? "rotate(0deg)" : "rotate(-90deg) scale(.8)",
+              opacity: 1, transition: `transform ${DUR.base}ms ${EASE.spring}` }}>
+              {dark ? <Sun size={16} color={GOLD} /> : <Moon size={16} color={PURPLE} />}
+            </span>
+          </button>
           <button className="btn" onClick={onAdmin} aria-label="Admin login" style={{
-            marginLeft: 8, display: "grid", placeItems: "center", width: 38, height: 38,
-            borderRadius: 10, border: `1px solid rgba(75,46,131,.2)`, background: "#fff", cursor: "pointer" }}>
+            marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
+            borderRadius: 10, border: `1px solid var(--border-strong)`,
+            background: "var(--surface)", cursor: "pointer" }}>
             <Lock size={16} color={PURPLE} />
           </button>
         </div>
@@ -898,8 +1032,8 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin }) {
       </nav>
 
       {menuOpen && (
-        <div className="mob" style={{ display: "none", padding: "8px 20px 20px", background: "#fff",
-          borderTop: `1px solid rgba(75,46,131,.1)` }}>
+        <div className="mob" style={{ display: "none", padding: "8px 20px 20px", background: "var(--nav-bg-solid)",
+          borderTop: `1px solid var(--border)` }}>
           {SECTIONS.map((s) =>
             s.external ? (
               <a key={s.id} href={s.href} target="_blank" rel="noopener noreferrer"
@@ -910,6 +1044,9 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin }) {
               <button key={s.id} onClick={() => onNav(s.id)} style={mobLink}>{s.label}</button>
             )
           )}
+          <button onClick={onToggleDark} style={mobLink}>
+            {dark ? <Sun size={15} /> : <Moon size={15} />} {dark ? "Light mode" : "Dark mode"}
+          </button>
           <button onClick={() => { setMenuOpen(false); onAdmin(); }} style={mobLink}>
             <Lock size={15} /> Admin
           </button>
@@ -929,16 +1066,17 @@ const navLink = (on) => ({
 });
 const mobLink = {
   display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
-  padding: "13px 8px", background: "none", border: "none", borderBottom: "1px solid rgba(0,0,0,.05)",
+  padding: "13px 8px", background: "none", border: "none", borderBottom: "1px solid var(--border)",
   fontSize: 16, fontWeight: 600, color: PURPLE, cursor: "pointer", fontFamily: "inherit",
   textDecoration: "none",
 };
 
-function Band({ children, id, alt, style, divider, lattice, decor }) {
+function Band({ children, id, alt, style, divider, lattice, decor, floats }) {
   return (
     <section id={id} style={{ position: "relative", overflow: "hidden",
-      padding: "92px 20px", background: alt ? "#fff" : "transparent", ...style }}>
-      {lattice && <StarLatticeBg color={PURPLE} opacity={alt ? 0.05 : 0.045} unit={66} />}
+      padding: "92px 20px", background: alt ? "var(--surface)" : "transparent", ...style }}>
+      {lattice && <StarLatticeBg color="var(--lattice)" opacity={alt ? 0.055 : 0.05} unit={66} />}
+      {floats}
       {/* Parallax botanicals framing the section. `decor` picks the arrangement. */}
       {decor === "left" && (
         <>
@@ -1032,7 +1170,7 @@ function Title({ children, delay = 0 }) {
 function Lead({ children, delay = 260, style }) {
   return (
     <Reveal delay={delay} variant="up" distance={18}>
-      <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5,
+      <p style={{ color: "var(--text-muted)", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5,
         lineHeight: 1.65, ...style }}>{children}</p>
     </Reveal>
   );
@@ -1047,7 +1185,7 @@ function HomeSection({ data, onNav }) {
         color: "#fff", padding: "104px 20px 0" }}>
         <AmbientGlow />
         <PatternField />
-        <CherryBlossoms count={22} />
+        <HangingLanterns />
         {/* central mihrab arch silhouette — strokes draw themselves in */}
         <HeroArch />
         <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2,
@@ -1090,7 +1228,12 @@ function HomeSection({ data, onNav }) {
       </section>
 
       {/* Gallery */}
-      <Band id="gallery" lattice decor="left">
+      <Band id="gallery" lattice decor="left" floats={<>
+        <Parallax speed={.12} float style={{ top: 20, right: "8%" }}>
+          <Star8 size={64} color={PURPLE} opacity={.10} /></Parallax>
+        <Parallax speed={-.08} float style={{ bottom: 40, left: "4%" }}>
+          <Star8 size={38} color={GOLD} opacity={.16} /></Parallax>
+      </>}>
         <Eyebrow>Our community</Eyebrow>
         <Title>Moments from the year</Title>
         <Lead>Eid celebrations, Jummah, retreats, and the everyday gatherings that make MSA home.</Lead>
@@ -1135,7 +1278,7 @@ function HomeSection({ data, onNav }) {
             <div style={{ position: "relative" }}>
               <h3 style={{ margin: "0 0 6px", color: PURPLE, fontSize: 21, fontWeight: 700 }}>
                 Support the MSA</h3>
-              <p style={{ margin: 0, color: "#5a5468" }}>Your donation funds events, iftars, and student programs.</p>
+              <p style={{ margin: 0, color: "var(--text-muted)" }}>Your donation funds events, iftars, and student programs.</p>
             </div>
             <a className="btn" href="https://www.zeffy.com/en-US/donation-form/44131d7a-557e-4fdc-9a70-14e9f67206ef"
                target="_blank" rel="noopener noreferrer"
@@ -1204,6 +1347,68 @@ function HeroWords({ text, delay = 0, step = 60 }) {
   );
 }
 
+/* Lanterns strung across the top of the hero. Each hangs from its own cord,
+   swings on its own cycle, and glows softly — staggered so they never move
+   in unison. Hidden for reduced-motion users. */
+function HangingLanterns() {
+  const reduced = useReducedMotion();
+  const [lit, setLit] = useState(false);
+  useEffect(() => {
+    if (reduced) { setLit(true); return; }
+    const t = setTimeout(() => setLit(true), 500);
+    return () => clearTimeout(t);
+  }, [reduced]);
+
+  // left %, drop length, scale, swing duration, phase offset
+  const lamps = [
+    { left: 8,  drop: 34, size: 52, dur: 6.4, delay: -0.9 },
+    { left: 21, drop: 74, size: 40, dur: 7.8, delay: -2.6 },
+    { left: 34, drop: 20, size: 34, dur: 5.6, delay: -1.7 },
+    { left: 68, drop: 26, size: 36, dur: 7.1, delay: -0.3 },
+    { left: 80, drop: 66, size: 46, dur: 6.0, delay: -3.4 },
+    { left: 92, drop: 30, size: 38, dur: 8.2, delay: -1.2 },
+  ];
+
+  return (
+    <div aria-hidden="true" style={{ position: "absolute", top: 0, left: 0, right: 0,
+      height: "56%", overflow: "hidden", pointerEvents: "none", zIndex: 1 }}>
+      {lamps.map((l, i) => (
+        <div key={i} style={{
+          position: "absolute", left: `${l.left}%`, top: 0,
+          transformOrigin: "50% 0%",
+          opacity: lit ? 1 : 0,
+          transform: lit ? "none" : "translate3d(0,-24px,0)",
+          transition: reduced ? "none"
+            : `opacity ${DUR.slow}ms ${EASE.outSoft} ${240 + i * 110}ms, transform ${DUR.slow}ms ${EASE.outSoft} ${240 + i * 110}ms`,
+        }}>
+          {/* swing wrapper — separate element so the entrance transform above
+              is never clobbered by the animation */}
+          <div className={reduced ? "" : "swing"} style={{
+            transformOrigin: "50% 0%",
+            animationDuration: `${l.dur}s`, animationDelay: `${l.delay}s`,
+          }}>
+            {/* cord */}
+            <div style={{ width: 1, height: l.drop, margin: "0 auto",
+              background: "linear-gradient(rgba(201,182,136,.55), rgba(201,182,136,.28))" }} />
+            <div style={{ position: "relative" }}>
+              {/* glow behind the lamp */}
+              <div className={reduced ? "" : "lampglow"} style={{
+                position: "absolute", left: "50%", top: "42%",
+                width: l.size * 2.4, height: l.size * 2.4,
+                transform: "translate(-50%,-50%)", borderRadius: "50%",
+                background: `radial-gradient(circle, rgba(201,182,136,.30) 0%, transparent 66%)`,
+                filter: "blur(12px)", animationDelay: `${l.delay}s`,
+              }} />
+              <Lantern size={l.size} color={GOLD} opacity={0.62}
+                style={{ position: "relative", margin: "0 auto" }} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* Mihrab arch whose outline draws itself, then breathes gently. */
 function HeroArch() {
   const reduced = useReducedMotion();
@@ -1213,20 +1418,25 @@ function HeroArch() {
     const t = setTimeout(() => setDrawn(true), 120);
     return () => clearTimeout(t);
   }, [reduced]);
+  // NOTE: the centering translate and the float animation must live on
+  // separate elements — a CSS animation that sets `transform` would otherwise
+  // overwrite `translateX(-50%)` and knock the arch off-centre.
   return (
-    <div aria-hidden="true" className={reduced ? "" : "floaty-slow"}
+    <div aria-hidden="true"
       style={{ position: "absolute", top: 40, left: "50%",
         transform: "translateX(-50%)", width: "min(560px, 88%)", height: "82%",
         opacity: 0.5, pointerEvents: "none" }}>
-      <svg viewBox="0 0 200 280" width="100%" height="100%" preserveAspectRatio="none">
-        <path d={archPath(200, 280, 150)} fill="none" stroke="rgba(201,182,136,.5)"
-          strokeWidth="1.2" pathLength="1"
-          style={{
-            strokeDasharray: 1,
-            strokeDashoffset: drawn ? 0 : 1,
-            transition: reduced ? "none" : `stroke-dashoffset 2600ms ${EASE.outSoft} 200ms`,
-          }} />
-      </svg>
+      <div className={reduced ? "" : "floaty-slow"} style={{ width: "100%", height: "100%" }}>
+        <svg viewBox="0 0 200 280" width="100%" height="100%" preserveAspectRatio="none">
+          <path d={archPath(200, 280, 150)} fill="none" stroke="rgba(201,182,136,.5)"
+            strokeWidth="1.2" pathLength="1"
+            style={{
+              strokeDasharray: 1,
+              strokeDashoffset: drawn ? 0 : 1,
+              transition: reduced ? "none" : `stroke-dashoffset 2600ms ${EASE.outSoft} 200ms`,
+            }} />
+        </svg>
+      </div>
     </div>
   );
 }
@@ -1477,7 +1687,7 @@ function MasjidalWidget({ id, embed }) {
         allowTransparency="true"
         loading="lazy"
       />
-      <div style={{ fontSize: 11, color: "#9a94a8", textAlign: "center", padding: "4px 0 8px" }}>
+      <div style={{ fontSize: 11, color: "var(--text-faint)", textAlign: "center", padding: "4px 0 8px" }}>
         Prayer times powered by Masjidal
       </div>
     </div>
@@ -1506,8 +1716,8 @@ function PrayerSection({ data }) {
               </div>
               <div>
                 <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700, color: PURPLE }}>{s.name}</h3>
-                <div style={{ color: "#6a6478", fontSize: 14.5, marginBottom: 6 }}>{s.loc}</div>
-                <div style={{ color: "#8a8498", fontSize: 13.5 }}>{s.note}</div>
+                <div style={{ color: "var(--text-muted)", fontSize: 14.5, marginBottom: 6 }}>{s.loc}</div>
+                <div style={{ color: "var(--text-faint)", fontSize: 13.5 }}>{s.note}</div>
               </div>
             </div>
             </Reveal>
@@ -1535,8 +1745,8 @@ function PrayerSection({ data }) {
             <div style={{ padding: "8px 24px" }}>
               {["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"].map((p) => (
                 <div key={p} style={{ display: "flex", justifyContent: "space-between",
-                  alignItems: "center", padding: "13px 0", borderBottom: "1px solid rgba(0,0,0,.06)" }}>
-                  <span style={{ fontWeight: 600, color: "#2c2640" }}>{p}</span>
+                  alignItems: "center", padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontWeight: 600, color: "var(--text)" }}>{p}</span>
                   <span style={{ fontFamily: "'Amiri',serif", fontSize: 18, color: PURPLE, fontWeight: 700 }}>{t[p]}</span>
                 </div>
               ))}
@@ -1548,15 +1758,15 @@ function PrayerSection({ data }) {
               <Calendar size={16} color={GOLD} />
               <span style={{ fontWeight: 700, fontSize: 13.5, color: PURPLE }}>Jummah</span>
             </div>
-            <div style={{ fontSize: 13.5, color: "#5a5468" }}>{t.jummah}</div>
+            <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{t.jummah}</div>
           </div>
           {t.announcement && (
-            <div style={{ padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,.06)" }}>
+            <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <Sparkles size={16} color={GOLD} />
                 <span style={{ fontWeight: 700, fontSize: 13.5, color: PURPLE }}>Announcement</span>
               </div>
-              <div style={{ fontSize: 13.5, color: "#5a5468", lineHeight: 1.55 }}>{t.announcement}</div>
+              <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.55 }}>{t.announcement}</div>
             </div>
           )}
         </div>
@@ -1582,29 +1792,29 @@ function EventsSection({ data }) {
             <Reveal key={day} delay={dn * 75} variant="rise" distance={28} duration={DUR.slow}>
             <div className="eventcard" style={{ ...card, padding: 0, overflow: "hidden", height: "100%",
               border: isFri ? `2px solid ${GOLD}` : card.border }}>
-              <div style={{ padding: "12px 18px", background: isFri ? "rgba(183,165,122,.15)" : "rgba(75,46,131,.05)",
+              <div style={{ padding: "12px 18px", background: isFri ? "rgba(183,165,122,.15)" : "var(--tint)",
                 display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontWeight: 700, color: PURPLE, fontSize: 15 }}>{day}</span>
                 {isFri && <Star8 size={15} />}
               </div>
               <div style={{ padding: 14, display: "grid", gap: 10, minHeight: 90 }}>
                 {evs.length === 0 && (
-                  <div style={{ color: "#b0aac0", fontSize: 13.5, padding: "18px 0", textAlign: "center" }}>
+                  <div style={{ color: "var(--text-faint)", fontSize: 13.5, padding: "18px 0", textAlign: "center" }}>
                     No events yet</div>
                 )}
                 {evs.map((e) => (
                   <div key={e.id} style={{ borderRadius: 12, overflow: "hidden",
-                    background: "rgba(75,46,131,.04)", border: "1px solid rgba(75,46,131,.08)" }}>
+                    background: "var(--tint)", border: "1px solid var(--border)" }}>
                     {e.img && <img src={e.img} alt={e.name}
                       style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />}
                     <div style={{ padding: "12px 14px" }}>
-                    <div style={{ fontWeight: 700, color: "#2c2640", fontSize: 14.5, marginBottom: 5 }}>{e.name}</div>
+                    <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 14.5, marginBottom: 5 }}>{e.name}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 5, color: PURPLE,
                       fontSize: 12.5, fontWeight: 600, marginBottom: 3 }}>
                       <Clock size={12} /> {e.time}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#7a7488", fontSize: 12.5 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--text-faint)", fontSize: 12.5 }}>
                       <MapPin size={12} /> {e.loc}</div>
-                    {e.desc && <div style={{ color: "#8a8498", fontSize: 12, marginTop: 6 }}>{e.desc}</div>}
+                    {e.desc && <div style={{ color: "var(--text-faint)", fontSize: 12, marginTop: 6 }}>{e.desc}</div>}
                     </div>
                   </div>
                 ))}
@@ -1657,7 +1867,7 @@ function ProgramCard({ program: p }) {
           transition: `transform ${DUR.base}ms ${EASE.spring}` }}>{progIcon(p.icon)}</div>
       </div>
       <h3 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 700, color: PURPLE }}>{p.name}</h3>
-      <p style={{ margin: 0, color: "#5a5468", fontSize: 14.5, lineHeight: 1.6 }}>{p.desc}</p>
+      <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 14.5, lineHeight: 1.6 }}>{p.desc}</p>
     </div>
   );
 }
@@ -1700,7 +1910,7 @@ function LinkCard({ link: l, bg }) {
         {linkIcon(l.kind)}
       </div>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 700, color: "#2c2640", fontSize: 16 }}>{l.name}</div>
+        <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 16 }}>{l.name}</div>
         <div style={{ color: PURPLE, fontSize: 13, fontWeight: 600, display: "flex",
           alignItems: "center", gap: 4, marginTop: 2 }}>
           Open
@@ -1782,12 +1992,12 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
     <div role="dialog" aria-modal="true" className="modalBg" style={{ position: "fixed", inset: 0, zIndex: 100,
       background: "rgba(20,12,40,.55)", backdropFilter: "blur(5px)", display: "grid",
       placeItems: "center", padding: 16 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="modalIn" style={{ background: "#fff", borderRadius: 20,
+      <div onClick={(e) => e.stopPropagation()} className="modalIn" style={{ background: "var(--surface)", borderRadius: 20,
         width: "100%", maxWidth: isAdmin ? 880 : 420, maxHeight: "90vh", overflow: "hidden",
         display: "flex", flexDirection: "column", boxShadow: "0 30px 80px rgba(0,0,0,.4)",
         transition: `max-width ${DUR.base}ms ${EASE.out}` }}>
 
-        <div style={{ padding: "18px 24px", borderBottom: "1px solid rgba(0,0,0,.08)",
+        <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border)",
           display: "flex", justifyContent: "space-between", alignItems: "center",
           background: GRAD_DEEP, color: "#fff" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1803,7 +2013,7 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
 
         {!isAdmin ? (
           <div style={{ padding: 28 }}>
-            <p style={{ margin: "0 0 18px", color: "#5a5468", fontSize: 14.5, lineHeight: 1.6 }}>
+            <p style={{ margin: "0 0 18px", color: "var(--text-muted)", fontSize: 14.5, lineHeight: 1.6 }}>
               Officer login. Sign in to edit events, prayer times, programs, and more.
             </p>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
@@ -1816,15 +2026,15 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
             <button className="btn" onClick={login} disabled={busy}
               style={{ ...btnPurple, width: "100%", marginTop: 16, opacity: busy ? .6 : 1 }}>
               {busy ? "Signing in…" : "Log in"}</button>
-            <p style={{ margin: "16px 0 0", fontSize: 12, color: "#b0aac0", lineHeight: 1.5 }}>
+            <p style={{ margin: "16px 0 0", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 }}>
               Accounts are managed by MSA admins in Supabase. Ask an admin to add you if you
               need access.
             </p>
           </div>
         ) : (
           <div style={{ display: "flex", minHeight: 0, flex: 1 }}>
-            <div style={{ width: 190, borderRight: "1px solid rgba(0,0,0,.08)", padding: 12,
-              overflowY: "auto", background: "#faf9fc" }}>
+            <div style={{ width: 190, borderRight: "1px solid var(--border)", padding: 12,
+              overflowY: "auto", background: "var(--surface-2)" }}>
               {[
                 ["hero", "Home / Hero"], ["gallery", "Photos"], ["sponsors", "Sponsors"],
                 ["spaces", "Prayer spaces"], ["times", "Prayer times"], ["events", "Events"],
@@ -1832,7 +2042,8 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
               ].map(([k, lbl]) => (
                 <button key={k} onClick={() => setTab(k)} style={{ display: "block", width: "100%",
                   textAlign: "left", padding: "10px 12px", borderRadius: 9, border: "none",
-                  background: tab === k ? PURPLE : "transparent", color: tab === k ? "#fff" : "#4a4458",
+                  background: tab === k ? PURPLE : "transparent",
+                  color: tab === k ? "#fff" : "var(--text-soft)",
                   fontWeight: 600, fontSize: 13.5, cursor: "pointer", marginBottom: 3,
                   fontFamily: "inherit" }}>{lbl}</button>
               ))}
@@ -1844,8 +2055,8 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                gap: 12, padding: "12px 24px", borderBottom: "1px solid rgba(0,0,0,.08)",
-                background: "#faf9fc", flexWrap: "wrap" }}>
+                gap: 12, padding: "12px 24px", borderBottom: "1px solid var(--border)",
+                background: "var(--surface-2)", flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13, color: savedMsg.startsWith("Save failed") ? "#c0392b" : "#5a5468" }}>
                   {savedMsg || "Edit below, then Save to publish to the live site."}</span>
                 <button className="btn" onClick={save} disabled={saving}
@@ -1941,9 +2152,9 @@ function Editor({ tab, data, setData }) {
     return (
       <Section title="Weekly events">
         {DAYS.map((day) => (
-          <div key={day} style={{ marginBottom: 20, border: "1px solid rgba(0,0,0,.1)",
+          <div key={day} style={{ marginBottom: 20, border: "1px solid var(--border)",
             borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ padding: "10px 14px", background: "rgba(75,46,131,.06)", fontWeight: 700,
+            <div style={{ padding: "10px 14px", background: "var(--tint)", fontWeight: 700,
               color: PURPLE, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               {day}
               <button onClick={() => setDay(day, [...(data.events[day] || []),
@@ -1952,7 +2163,7 @@ function Editor({ tab, data, setData }) {
             </div>
             <div style={{ padding: 12, display: "grid", gap: 12 }}>
               {(data.events[day] || []).length === 0 &&
-                <div style={{ color: "#b0aac0", fontSize: 13, textAlign: "center", padding: 8 }}>No events</div>}
+                <div style={{ color: "var(--text-faint)", fontSize: 13, textAlign: "center", padding: 8 }}>No events</div>}
               {(data.events[day] || []).map((e, idx) => (
                 <div key={e.id} style={{ display: "grid", gap: 6, gridTemplateColumns: "1fr 1fr auto" }}>
                   <input style={inpSm} placeholder="Name" value={e.name}
@@ -2016,7 +2227,7 @@ function Section({ title, children }) {
 function Field({ label, children }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#4a4458",
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text-soft)",
         marginBottom: 6 }}>{label}</label>
       {children}
     </div>
@@ -2046,12 +2257,12 @@ function ImageField({ value, onChange, folder = "gallery", label = "Image" }) {
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <label style={{ fontSize: 12, fontWeight: 600, color: "#7a7488" }}>{label}</label>
+      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>{label}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 5 }}>
         <div style={{ width: 74, height: 56, borderRadius: 9, overflow: "hidden", flexShrink: 0,
-          border: "1px solid rgba(0,0,0,.12)", background: "#f4f2f8", display: "grid", placeItems: "center" }}>
+          border: "1px solid var(--border-strong)", background: "var(--surface-2)", display: "grid", placeItems: "center" }}>
           {value ? <img src={value} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                 : <span style={{ fontSize: 10.5, color: "#b0aac0" }}>None</span>}
+                 : <span style={{ fontSize: 10.5, color: "var(--text-faint)" }}>None</span>}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
@@ -2077,7 +2288,7 @@ function ListEditor({ title, items, onChange, blank, fields }) {
         alignItems: "center", gap: 6 }}><Plus size={16} /> Add</button>
       <div style={{ display: "grid", gap: 14 }}>
         {items.map((it, i) => (
-          <div key={it.id} style={{ border: "1px solid rgba(0,0,0,.1)", borderRadius: 12,
+          <div key={it.id} style={{ border: "1px solid var(--border)", borderRadius: 12,
             padding: 14, display: "grid", gap: 8, position: "relative" }}>
             {fields.map(([key, lbl, kind]) => (
               kind === "image" ? (
@@ -2086,7 +2297,7 @@ function ListEditor({ title, items, onChange, blank, fields }) {
                   onChange={(url) => edit(i, key, url)} />
               ) : (
                 <div key={key}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#7a7488" }}>{lbl}</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>{lbl}</label>
                   <input style={inpSm} value={it[key] || ""} onChange={(e) => edit(i, key, e.target.value)} />
                 </div>
               )
@@ -2101,8 +2312,8 @@ function ListEditor({ title, items, onChange, blank, fields }) {
 }
 
 /* ---------- shared styles ---------- */
-const card = { background: "#fff", borderRadius: 18, border: "1px solid rgba(75,46,131,.1)",
-  boxShadow: "0 4px 20px rgba(75,46,131,.06)" };
+const card = { background: "var(--surface)", borderRadius: 18, border: "1px solid var(--border)",
+  boxShadow: "var(--card-shadow)" };
 const btnGold = { background: GOLD, color: "#2c2418", border: "none", padding: "14px 28px",
   borderRadius: 12, fontWeight: 700, fontSize: 15.5, cursor: "pointer", fontFamily: "inherit" };
 const btnGhost = { background: "rgba(255,255,255,.12)", color: "#fff",
@@ -2110,10 +2321,12 @@ const btnGhost = { background: "rgba(255,255,255,.12)", color: "#fff",
   fontWeight: 600, fontSize: 15.5, cursor: "pointer", fontFamily: "inherit" };
 const btnPurple = { background: PURPLE, color: "#fff", border: "none", padding: "11px 20px",
   borderRadius: 10, fontWeight: 600, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" };
-const inp = { width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(0,0,0,.15)",
-  fontSize: 14.5, fontFamily: "inherit", outline: "none" };
-const inpSm = { width: "100%", padding: "9px 11px", borderRadius: 8, border: "1px solid rgba(0,0,0,.15)",
-  fontSize: 13.5, fontFamily: "inherit", outline: "none" };
+const inp = { width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid var(--border-strong)",
+  fontSize: 14.5, fontFamily: "inherit", outline: "none",
+  background: "var(--surface)", color: "var(--text)" };
+const inpSm = { width: "100%", padding: "9px 11px", borderRadius: 8, border: "1px solid var(--border-strong)",
+  fontSize: 13.5, fontFamily: "inherit", outline: "none",
+  background: "var(--surface)", color: "var(--text)" };
 const miniBtn = { display: "inline-flex", alignItems: "center", gap: 5, background: PURPLE, color: "#fff",
   border: "none", padding: "5px 11px", borderRadius: 8, fontSize: 12.5, fontWeight: 600,
   cursor: "pointer", fontFamily: "inherit" };
