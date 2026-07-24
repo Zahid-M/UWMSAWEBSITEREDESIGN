@@ -167,6 +167,81 @@ function StarLatticeBg({ color = PURPLE, opacity = 0.05, unit = 64 }) {
 
 
 
+/* ── Scroll reveal ──────────────────────────────────────────────────────
+   Wrap anything in <Reveal> and it fades + rises into place the first time
+   it scrolls into view, then stays put. Uses IntersectionObserver — no
+   scroll hijacking. Respects prefers-reduced-motion. */
+function Reveal({ children, delay = 0, y = 22, style, ...rest }) {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setShown(true); return; }
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { setShown(true); obs.disconnect(); } },
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{
+      opacity: shown ? 1 : 0,
+      transform: shown ? "none" : `translateY(${y}px)`,
+      transition: `opacity .7s cubic-bezier(.22,.61,.36,1) ${delay}ms, transform .7s cubic-bezier(.22,.61,.36,1) ${delay}ms`,
+      willChange: "opacity, transform", ...style,
+    }} {...rest}>{children}</div>
+  );
+}
+
+/* ── Cherry blossoms ────────────────────────────────────────────────────
+   Petals drifting down behind the hero content. Pure CSS animation on a
+   handful of SVG petals — cheap, and skipped for reduced-motion users. */
+function Petal({ color, size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2 C14.5 6, 18 7, 20.5 6.5 C19.5 10, 20 13.5, 22 16 C18.5 16.5, 15.5 18.5, 14 22 C13 18.5, 12 17, 12 17 C12 17, 11 18.5, 10 22 C8.5 18.5, 5.5 16.5, 2 16 C4 13.5, 4.5 10, 3.5 6.5 C6 7, 9.5 6, 12 2 Z"
+        fill={color} opacity="0.85" />
+    </svg>
+  );
+}
+function CherryBlossoms({ count = 16 }) {
+  const [on, setOn] = useState(true);
+  useEffect(() => { setOn(!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }, []);
+  const petals = React.useMemo(() => {
+    const colors = [PINK, MAUVE, "#e8c4d4", GOLD];
+    return Array.from({ length: count }, (_, i) => ({
+      id: i, left: (i * 97) % 100, size: 10 + ((i * 7) % 12),
+      duration: 9 + ((i * 3) % 8), delay: -((i * 13) % 16),
+      drift: (i % 2 === 0 ? 1 : -1) * (20 + (i * 11) % 50),
+      color: colors[i % colors.length], spin: (i % 2 === 0 ? 1 : -1) * (180 + (i * 37) % 360),
+    }));
+  }, [count]);
+  if (!on) return null;
+  return (
+    <div aria-hidden="true" style={{ position: "absolute", inset: 0, overflow: "hidden",
+      pointerEvents: "none", zIndex: 1 }}>
+      <style>{`
+        @keyframes petalFall {
+          0% { transform: translate3d(0,-12%,0) rotate(0deg); opacity: 0; }
+          8% { opacity: .9; } 92% { opacity: .75; }
+          100% { transform: translate3d(var(--drift),112%,0) rotate(var(--spin)); opacity: 0; }
+        }
+        .petal { position:absolute; top:0; animation-name:petalFall;
+                 animation-timing-function:linear; animation-iteration-count:infinite; }
+      `}</style>
+      {petals.map((p) => (
+        <span key={p.id} className="petal" style={{ left: `${p.left}%`,
+          animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s`,
+          "--drift": `${p.drift}px`, "--spin": `${p.spin}deg` }}>
+          <Petal color={p.color} size={p.size} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const seed = {
   hero: {
     title: "University of Washington Muslim Student Association",
@@ -481,6 +556,7 @@ function HomeSection({ data, onNav }) {
         background: GRAD_DEEP,
         color: "#fff", padding: "104px 20px 0" }}>
         <PatternField />
+        <CherryBlossoms count={16} />
         {/* central mihrab arch silhouette framing the hero content */}
         <div aria-hidden="true" style={{ position: "absolute", top: 40, left: "50%",
           transform: "translateX(-50%)", width: "min(560px, 88%)", height: "82%",
@@ -488,8 +564,8 @@ function HomeSection({ data, onNav }) {
           <Arch w={200} h={280} spring={150} stroke={`rgba(201,182,136,.5)`} sw={1.2}
             style={{ width: "100%", height: "100%" }} />
         </div>
-        <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", textAlign: "center",
-          paddingBottom: 90 }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2,
+          textAlign: "center", paddingBottom: 90 }}>
           <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo" className="reveal"
             style={{ width: 132, height: 132, borderRadius: 24, objectFit: "cover", marginBottom: 26,
               boxShadow: "0 12px 40px rgba(0,0,0,.5)", border: "1px solid rgba(201,182,136,.3)" }} />
@@ -536,7 +612,7 @@ function HomeSection({ data, onNav }) {
         <Title>Our sponsors & partners</Title>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))",
           gap: 16, marginTop: 32 }}>
-          {data.sponsors.map((s) => {
+          {data.sponsors.map((s, n) => {
             const inner = s.logo ? (
               <img src={s.logo} alt={s.name}
                 style={{ maxHeight: 60, maxWidth: "100%", objectFit: "contain" }} />
@@ -545,11 +621,15 @@ function HomeSection({ data, onNav }) {
             );
             const boxStyle = { ...card, display: "grid", placeItems: "center",
               height: 96, textAlign: "center", padding: 16, textDecoration: "none" };
-            return s.url ? (
-              <a key={s.id} href={s.url} target="_blank" rel="noopener noreferrer"
-                className="lift" style={boxStyle} title={`Visit ${s.name}`}>{inner}</a>
-            ) : (
-              <div key={s.id} className="lift" style={boxStyle}>{inner}</div>
+            return (
+              <Reveal key={s.id} delay={n * 60}>
+                {s.url ? (
+                  <a href={s.url} target="_blank" rel="noopener noreferrer"
+                    className="lift" style={boxStyle} title={`Visit ${s.name}`}>{inner}</a>
+                ) : (
+                  <div className="lift" style={boxStyle}>{inner}</div>
+                )}
+              </Reveal>
             );
           })}
         </div>
@@ -780,11 +860,12 @@ function EventsSection({ data }) {
         Everything happening across the week — drop in anytime.
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 16 }}>
-        {DAYS.map((day) => {
+        {DAYS.map((day, dn) => {
           const evs = data.events[day] || [];
           const isFri = day === "Friday";
           return (
-            <div key={day} style={{ ...card, padding: 0, overflow: "hidden",
+            <Reveal key={day} delay={dn * 60}>
+            <div style={{ ...card, padding: 0, overflow: "hidden",
               border: isFri ? `2px solid ${GOLD}` : card.border }}>
               <div style={{ padding: "12px 18px", background: isFri ? "rgba(183,165,122,.15)" : "rgba(75,46,131,.05)",
                 display: "flex", alignItems: "center", gap: 8 }}>
@@ -814,6 +895,7 @@ function EventsSection({ data }) {
                 ))}
               </div>
             </div>
+            </Reveal>
           );
         })}
       </div>
@@ -831,8 +913,9 @@ function ProgramsSection({ data }) {
         Ways to grow, give back, and connect throughout the year.
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 20 }}>
-        {data.programs.map((p) => (
-          <div key={p.id} className="lift" style={{ ...card, padding: "26px 24px" }}>
+        {data.programs.map((p, n) => (
+          <Reveal key={p.id} delay={n * 70}>
+          <div className="lift" style={{ ...card, padding: "26px 24px" }}>
             <div style={{ width: 54, height: 62, position: "relative", display: "grid",
               placeItems: "center", marginBottom: 16 }}>
               <div style={{ position: "absolute", inset: 0 }}>
@@ -844,6 +927,7 @@ function ProgramsSection({ data }) {
             <h3 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 700, color: PURPLE }}>{p.name}</h3>
             <p style={{ margin: 0, color: "#5a5468", fontSize: 14.5, lineHeight: 1.6 }}>{p.desc}</p>
           </div>
+          </Reveal>
         ))}
       </div>
     </Band>
@@ -864,8 +948,9 @@ function ConnectSection({ data }) {
         Join the group chats, follow along, and support the community.
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 16 }}>
-        {data.links.map((l) => (
-          <a key={l.id} href={l.href} target="_blank" rel="noopener noreferrer" className="lift"
+        {data.links.map((l, n) => (
+          <Reveal key={l.id} delay={n * 55}>
+          <a href={l.href} target="_blank" rel="noopener noreferrer" className="lift"
             style={{ ...card, padding: "22px 24px", display: "flex", alignItems: "center", gap: 16,
               textDecoration: "none" }}>
             <div style={{ width: 50, height: 50, borderRadius: 13, background: bg(l.kind),
@@ -879,6 +964,7 @@ function ConnectSection({ data }) {
                 Open <ExternalLink size={12} /></div>
             </div>
           </a>
+          </Reveal>
         ))}
       </div>
     </Band>
