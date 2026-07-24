@@ -171,29 +171,140 @@ function StarLatticeBg({ color = PURPLE, opacity = 0.05, unit = 64 }) {
    Wrap anything in <Reveal> and it fades + rises into place the first time
    it scrolls into view, then stays put. Uses IntersectionObserver — no
    scroll hijacking. Respects prefers-reduced-motion. */
-function Reveal({ children, delay = 0, y = 22, style, ...rest }) {
-  const ref = useRef(null);
-  const [shown, setShown] = useState(false);
+/* ════════════════════════════════════════════════════════════════════════
+   MOTION FOUNDATION
+   Shared easing, timing, and reveal primitives. Everything animated on the
+   site composes from these so timing stays consistent and tunable in one
+   place. Only transform/opacity are animated (GPU-friendly, 60fps).
+   ════════════════════════════════════════════════════════════════════════ */
+
+const EASE = {
+  // Primary: decelerating, calm arrival. Used for most entrances.
+  out: "cubic-bezier(.16,.84,.44,1)",
+  // Softer, longer tail — for large elements (hero, images).
+  outSoft: "cubic-bezier(.22,.61,.36,1)",
+  // Gentle both ends — for hover and state changes.
+  inOut: "cubic-bezier(.65,.05,.36,1)",
+  // Slight overshoot — used sparingly (buttons, badges).
+  spring: "cubic-bezier(.34,1.36,.64,1)",
+};
+
+const DUR = {
+  fast: 260,
+  base: 620,
+  slow: 900,
+  hero: 1100,
+};
+
+// Single source of truth for the reduced-motion preference, kept live so
+// the site responds if the user changes it mid-session.
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
   useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setShown(true); return; }
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!mq) return;
+    setReduced(mq.matches);
+    const on = (e) => setReduced(e.matches);
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
+  return reduced;
+}
+
+// Fires once when the element scrolls into view.
+function useInView({ threshold = 0.15, rootMargin = "0px 0px -10% 0px", once = true } = {}) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setShown(true); obs.disconnect(); } },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
-    );
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { setInView(true); if (once) obs.disconnect(); }
+      else if (!once) setInView(false);
+    }, { threshold, rootMargin });
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [threshold, rootMargin, once]);
+  return [ref, inView];
+}
+
+/* Reveal — the workhorse entrance animation.
+   variant: "up" | "down" | "left" | "right" | "fade" | "scale" | "blur"
+   Composes transform + opacity only. */
+const REVEAL_VARIANTS = {
+  up:    (d) => `translate3d(0, ${d}px, 0)`,
+  down:  (d) => `translate3d(0, ${-d}px, 0)`,
+  left:  (d) => `translate3d(${d}px, 0, 0)`,
+  right: (d) => `translate3d(${-d}px, 0, 0)`,
+  fade:  () => "none",
+  scale: (d) => `scale(${1 - d / 260})`,
+  rise:  (d) => `translate3d(0, ${d}px, 0) scale(${1 - d / 900})`,
+};
+
+function Reveal({
+  children, delay = 0, distance = 26, variant = "up",
+  duration = DUR.base, ease = EASE.out, style, threshold = 0.15, as: Tag = "div", ...rest
+}) {
+  const reduced = useReducedMotion();
+  const [ref, inView] = useInView({ threshold });
+  const show = reduced || inView;
+  const from = (REVEAL_VARIANTS[variant] || REVEAL_VARIANTS.up)(distance);
   return (
-    <div ref={ref} style={{
-      opacity: shown ? 1 : 0,
-      transform: shown ? "none" : `translateY(${y}px)`,
-      transition: `opacity .7s cubic-bezier(.22,.61,.36,1) ${delay}ms, transform .7s cubic-bezier(.22,.61,.36,1) ${delay}ms`,
-      willChange: "opacity, transform", ...style,
-    }} {...rest}>{children}</div>
+    <Tag ref={ref} style={{
+      opacity: show ? 1 : 0,
+      transform: show ? "translate3d(0,0,0)" : from,
+      transition: reduced ? "none"
+        : `opacity ${duration}ms ${ease} ${delay}ms, transform ${duration}ms ${ease} ${delay}ms`,
+      willChange: show ? "auto" : "opacity, transform",
+      ...style,
+    }} {...rest}>{children}</Tag>
   );
 }
+
+/* Stagger — reveals children in sequence with a shared rhythm.
+   Avoids hand-writing delay={n * 70} everywhere. */
+function Stagger({ children, step = 80, base = 0, variant = "up", distance = 26,
+  duration = DUR.base, ease = EASE.out, style, ...rest }) {
+  const items = React.Children.toArray(children);
+  return (
+    <>
+      {items.map((child, i) => (
+        <Reveal key={child.key ?? i} delay={base + i * step} variant={variant}
+          distance={distance} duration={duration} ease={ease} style={style} {...rest}>
+          {child}
+        </Reveal>
+      ))}
+    </>
+  );
+}
+
+/* TextReveal — splits a string into words that rise in sequence.
+   Uses inline-block spans; whitespace preserved so wrapping is natural. */
+function TextReveal({ text, delay = 0, step = 42, duration = DUR.slow,
+  ease = EASE.outSoft, style, as: Tag = "span" }) {
+  const reduced = useReducedMotion();
+  const [ref, inView] = useInView({ threshold: 0.25 });
+  const show = reduced || inView;
+  const words = String(text).split(" ");
+  return (
+    <Tag ref={ref} style={{ display: "inline-block", ...style }}>
+      {words.map((w, i) => (
+        <span key={i} style={{ display: "inline-block", overflow: "hidden",
+          verticalAlign: "top" }}>
+          <span style={{
+            display: "inline-block",
+            opacity: show ? 1 : 0,
+            transform: show ? "translate3d(0,0,0)" : "translate3d(0,0.9em,0)",
+            transition: reduced ? "none"
+              : `opacity ${duration}ms ${ease} ${delay + i * step}ms, transform ${duration}ms ${ease} ${delay + i * step}ms`,
+          }}>{w}</span>
+          {i < words.length - 1 && <span>&nbsp;</span>}
+        </span>
+      ))}
+    </Tag>
+  );
+}
+
 
 /* ── Cherry blossoms ────────────────────────────────────────────────────
    Petals drifting down behind the hero content. Pure CSS animation on a
@@ -245,36 +356,55 @@ function CherryBlossoms({ count = 16 }) {
 /* ── Parallax ───────────────────────────────────────────────────────────
    Drifts a decorative element as it passes through the viewport. Transform
    only (no layout thrash), rAF-throttled, off for reduced-motion users. */
-function Parallax({ speed = 0.15, children, style, ...rest }) {
+function Parallax({ speed = 0.15, children, style, float = false, ...rest }) {
   const ref = useRef(null);
-  const [offset, setOffset] = useState(0);
+  const reduced = useReducedMotion();
+  const target = useRef(0);
+  const current = useRef(0);
+  const raf = useRef(0);
+
   useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (reduced) return;
     const el = ref.current;
     if (!el) return;
-    let raf = 0, ticking = false;
-    const update = () => {
+
+    // Read scroll position into a target, then ease toward it every frame.
+    // The interpolation is what removes the "stepping" feel of raw scroll
+    // parallax and gives it the smooth, weighted quality of a good agency site.
+    const measure = () => {
       const r = el.getBoundingClientRect();
       const vh = window.innerHeight || 1;
       const progress = (r.top + r.height / 2 - vh / 2) / vh;
-      setOffset(progress * speed * 100);
-      ticking = false;
+      target.current = progress * speed * 100;
     };
-    const onScroll = () => { if (ticking) return; ticking = true; raf = requestAnimationFrame(update); };
-    update();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
+
+    const tick = () => {
+      current.current += (target.current - current.current) * 0.085; // lerp
+      if (el) el.style.transform = `translate3d(0, ${current.current.toFixed(2)}px, 0)`;
+      raf.current = requestAnimationFrame(tick);
+    };
+
+    measure();
+    current.current = target.current;
+    el.style.transform = `translate3d(0, ${current.current.toFixed(2)}px, 0)`;
+    raf.current = requestAnimationFrame(tick);
+
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure, { passive: true });
     return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      cancelAnimationFrame(raf.current);
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
     };
-  }, [speed]);
+  }, [speed, reduced]);
+
   return (
-    <div ref={ref} aria-hidden="true" style={{
-      position: "absolute", pointerEvents: "none", zIndex: 0,
-      transform: `translate3d(0, ${offset}px, 0)`, willChange: "transform", ...style,
-    }} {...rest}>{children}</div>
+    <div ref={ref} aria-hidden="true"
+      className={float && !reduced ? "floaty-slow" : undefined}
+      style={{
+        position: "absolute", pointerEvents: "none", zIndex: 0,
+        willChange: "transform", ...style,
+      }} {...rest}>{children}</div>
   );
 }
 
@@ -380,13 +510,14 @@ function StatsBand({ stats }) {
   return (
     <section style={{ position: "relative", overflow: "hidden", background: INK,
       padding: "72px 20px" }}>
-      <Parallax speed={0.25} style={{ top: -30, left: -40, opacity: .5 }}>
+      <AmbientGlow subtle />
+      <Parallax speed={0.25} float style={{ top: -30, left: -40, opacity: .5 }}>
         <SakuraBranch width={240} opacity={.55} />
       </Parallax>
-      <Parallax speed={-0.2} style={{ bottom: -20, right: -30, opacity: .5 }}>
+      <Parallax speed={-0.2} float style={{ bottom: -20, right: -30, opacity: .5 }}>
         <SakuraBranch width={220} flip opacity={.55} />
       </Parallax>
-      <Parallax speed={0.4} style={{ top: 30, right: "18%" }}>
+      <Parallax speed={0.4} float style={{ top: 30, right: "18%" }}>
         <CrescentAccent size={90} opacity={.28} />
       </Parallax>
       <div style={{ position: "relative", zIndex: 1, maxWidth: 1000, margin: "0 auto",
@@ -585,57 +716,175 @@ function StyleTag() {
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
       body { margin: 0; }
+
+      /* ── Accessibility: honour reduced-motion everywhere ────────────── */
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
-        *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+        *, *::before, *::after {
+          animation-duration: .001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: .001ms !important;
+          scroll-behavior: auto !important;
+        }
       }
-      .reveal { opacity: 0; transform: translateY(24px); animation: rise .7s ease forwards; }
-      @keyframes rise { to { opacity: 1; transform: none; } }
+
+      /* ── Hero entrance ──────────────────────────────────────────────── */
+      .reveal { opacity: 0; transform: translate3d(0,26px,0);
+                animation: rise ${DUR.hero}ms ${EASE.outSoft} forwards; }
+      @keyframes rise { to { opacity: 1; transform: translate3d(0,0,0); } }
       @keyframes spin { to { transform: rotate(360deg); } }
-      .lift { transition: transform .25s ease, box-shadow .25s ease; }
-      .lift:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(75,46,131,.18); }
-      a:focus-visible, button:focus-visible { outline: 3px solid ${GOLD}; outline-offset: 3px; border-radius: 6px; }
+
+      /* ── Card lift: two-stage easing so it feels weighted ───────────── */
+      .lift { transition: transform ${DUR.fast}ms ${EASE.out},
+                          box-shadow ${DUR.fast}ms ${EASE.out}; }
+      .lift:hover { transform: translate3d(0,-6px,0);
+                    box-shadow: 0 22px 48px rgba(75,46,131,.20); }
+      .lift:active { transform: translate3d(0,-2px,0);
+                     transition-duration: 90ms; }
+
+      /* Inner media on a lifting card gets a slow counter-zoom — the depth
+         cue that makes hover feel layered rather than flat. */
+      .lift img, .zoomable img { transition: transform 900ms ${EASE.outSoft}; }
+      .lift:hover img, .zoomable:hover img { transform: scale(1.045); }
+
+      /* ── Buttons: press physics ─────────────────────────────────────── */
+      .btn { transition: transform ${DUR.fast}ms ${EASE.spring},
+                         box-shadow ${DUR.fast}ms ${EASE.out},
+                         filter ${DUR.fast}ms ${EASE.out};
+             will-change: transform; }
+      .btn:hover { transform: translate3d(0,-2px,0); filter: brightness(1.06); }
+      .btn:active { transform: translate3d(0,1px,0) scale(.985);
+                    transition-duration: 80ms; }
+
+      /* ── Nav links: underline grows from centre ─────────────────────── */
+      .navlink { position: relative; }
+      .navlink::after {
+        content: ""; position: absolute; left: 50%; right: 50%; bottom: 4px;
+        height: 2px; background: ${GOLD}; border-radius: 2px;
+        transition: left ${DUR.fast}ms ${EASE.out}, right ${DUR.fast}ms ${EASE.out};
+      }
+      .navlink:hover::after { left: 14px; right: 14px; }
+
+      /* ── Ambient background glow (very slow, very soft) ─────────────── */
+      @keyframes glowDrift {
+        0%   { transform: translate3d(0,0,0) scale(1); }
+        50%  { transform: translate3d(3%,-2%,0) scale(1.12); }
+        100% { transform: translate3d(0,0,0) scale(1); }
+      }
+      .glow { animation: glowDrift 22s ${EASE.inOut} infinite; will-change: transform; }
+
+      /* ── Decorative float — for SVG accents ─────────────────────────── */
+      @keyframes floatY {
+        0%   { transform: translate3d(0,0,0) rotate(0deg); }
+        50%  { transform: translate3d(0,-12px,0) rotate(1.4deg); }
+        100% { transform: translate3d(0,0,0) rotate(0deg); }
+      }
+      .floaty { animation: floatY 9s ${EASE.inOut} infinite; }
+      .floaty-slow { animation: floatY 15s ${EASE.inOut} infinite; }
+
+      /* ── Sponsor logos: settle to full colour on hover ──────────────── */
+      .sponsorlogo { filter: saturate(.55) opacity(.82);
+                     transition: filter ${DUR.base}ms ${EASE.out},
+                                 transform ${DUR.base}ms ${EASE.out}; }
+      .lift:hover .sponsorlogo { filter: saturate(1) opacity(1);
+                                 transform: scale(1.05); }
+
+      /* ── Event cards: header tint deepens on hover ──────────────────── */
+      .eventcard { transition: transform ${DUR.fast}ms ${EASE.out},
+                               box-shadow ${DUR.fast}ms ${EASE.out},
+                               border-color ${DUR.fast}ms ${EASE.out}; }
+      .eventcard:hover { transform: translate3d(0,-5px,0);
+                         box-shadow: 0 20px 44px rgba(75,46,131,.16); }
+
+      /* ── Admin modal entrance ───────────────────────────────────────── */
+      @keyframes modalBgIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes modalIn {
+        from { opacity: 0; transform: translate3d(0,18px,0) scale(.975); }
+        to   { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+      }
+      .modalBg { animation: modalBgIn ${DUR.fast}ms ${EASE.out} both; }
+      .modalIn { animation: modalIn ${DUR.base}ms ${EASE.out} 40ms both; }
+
+      /* ── Gallery crossfade ──────────────────────────────────────────── */
+      .xfade { transition: opacity 780ms ${EASE.outSoft},
+                           transform 1500ms ${EASE.outSoft}; }
+
+      a:focus-visible, button:focus-visible {
+        outline: 3px solid ${GOLD}; outline-offset: 3px; border-radius: 6px;
+      }
     `}</style>
   );
 }
 
 function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin }) {
   const [solid, setSolid] = useState(false);
+  const [progress, setProgress] = useState(0);
+  // rAF-throttled so scrolling stays at 60fps even on long pages.
   useEffect(() => {
-    const f = () => setSolid(window.scrollY > 24);
-    f(); window.addEventListener("scroll", f); return () => window.removeEventListener("scroll", f);
+    let ticking = false, raf = 0;
+    const read = () => {
+      const y = window.scrollY;
+      setSolid(y > 24);
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setProgress(max > 0 ? Math.min(y / max, 1) : 0);
+      ticking = false;
+    };
+    const onScroll = () => { if (ticking) return; ticking = true; raf = requestAnimationFrame(read); };
+    read();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
   }, []);
   return (
     <header style={{
       position: "sticky", top: 0, zIndex: 50,
-      background: solid ? "rgba(255,255,255,.92)" : "rgba(255,255,255,.75)",
-      backdropFilter: "blur(12px)",
-      borderBottom: `1px solid ${solid ? "rgba(75,46,131,.12)" : "transparent"}`,
-      transition: "all .3s ease",
+      background: solid ? "rgba(255,255,255,.86)" : "rgba(255,255,255,.62)",
+      backdropFilter: `blur(${solid ? 18 : 10}px) saturate(1.6)`,
+      WebkitBackdropFilter: `blur(${solid ? 18 : 10}px) saturate(1.6)`,
+      borderBottom: `1px solid ${solid ? "rgba(75,46,131,.10)" : "transparent"}`,
+      boxShadow: solid ? "0 6px 28px rgba(75,46,131,.07)" : "0 0 0 rgba(0,0,0,0)",
+      transition: `background ${DUR.base}ms ${EASE.out}, box-shadow ${DUR.base}ms ${EASE.out}, border-color ${DUR.base}ms ${EASE.out}, backdrop-filter ${DUR.base}ms ${EASE.out}`,
     }}>
+      {/* Reading progress — a hairline that fills as you scroll */}
+      <div aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: -1,
+        height: 2, transformOrigin: "0 50%",
+        transform: `scaleX(${progress})`,
+        background: `linear-gradient(90deg, ${VIOLET}, ${GOLD})`,
+        opacity: progress > 0.005 ? 1 : 0,
+        transition: `opacity ${DUR.base}ms ${EASE.out}` }} />
+      {/* Height is animated with a transform-driven wrapper rather than
+          padding/height, so the sticky header never triggers layout on scroll. */}
       <nav style={{ maxWidth: 1200, margin: "0 auto", padding: "12px 20px",
         display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => onNav("home")} aria-label="MSA at UW — home" style={{
+        <button className="btn" onClick={() => onNav("home")} aria-label="MSA at UW — home" style={{
           display: "flex", alignItems: "center", gap: 10, background: "none", border: "none",
-          cursor: "pointer", padding: 0 }}>
+          cursor: "pointer", padding: 0, height: 44 }}>
           <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo"
-            style={{ height: 44, width: 44, borderRadius: 10, objectFit: "cover" }} />
+            style={{ height: 44, width: 44, borderRadius: 10, objectFit: "cover",
+              transformOrigin: "left center",
+              transform: solid ? "scale(.86)" : "scale(1)",
+              transition: `transform ${DUR.base}ms ${EASE.out}` }} />
         </button>
 
         <div className="desk" style={{ display: "flex", alignItems: "center", gap: 4 }}>
           {SECTIONS.map((s) =>
             s.external ? (
               <a key={s.id} href={s.href} target="_blank" rel="noopener noreferrer"
-                 style={navLink(false)}>
+                 className="navlink" style={navLink(false)}>
                 {s.label} <ExternalLink size={13} style={{ verticalAlign: "-1px" }} />
               </a>
             ) : (
-              <button key={s.id} onClick={() => onNav(s.id)} style={navLink(active === s.id)}>
+              <button key={s.id} onClick={() => onNav(s.id)}
+                className="navlink" style={navLink(active === s.id)}>
                 {s.label}
               </button>
             )
           )}
-          <button onClick={onAdmin} aria-label="Admin login" style={{
+          <button className="btn" onClick={onAdmin} aria-label="Admin login" style={{
             marginLeft: 8, display: "grid", placeItems: "center", width: 38, height: 38,
             borderRadius: 10, border: `1px solid rgba(75,46,131,.2)`, background: "#fff", cursor: "pointer" }}>
             <Lock size={16} color={PURPLE} />
@@ -673,9 +922,10 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin }) {
   );
 }
 const navLink = (on) => ({
-  padding: "9px 14px", background: on ? "rgba(75,46,131,.08)" : "transparent",
+  padding: "9px 14px", background: on ? "rgba(75,46,131,.09)" : "transparent",
   border: "none", cursor: "pointer", borderRadius: 10, fontWeight: 600, fontSize: 14.5,
-  color: on ? PURPLE : "#4a4458", fontFamily: "inherit", transition: "all .2s ease",
+  color: on ? PURPLE : "#4a4458", fontFamily: "inherit", textDecoration: "none",
+  transition: `background ${DUR.fast}ms ${EASE.out}, color ${DUR.fast}ms ${EASE.out}`,
 });
 const mobLink = {
   display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
@@ -692,33 +942,33 @@ function Band({ children, id, alt, style, divider, lattice, decor }) {
       {/* Parallax botanicals framing the section. `decor` picks the arrangement. */}
       {decor === "left" && (
         <>
-          <Parallax speed={0.22} style={{ top: -40, left: -70 }}>
+          <Parallax speed={0.22} float style={{ top: -40, left: -70 }}>
             <SakuraBranch width={230} opacity={.16} />
           </Parallax>
-          <Parallax speed={-0.16} style={{ bottom: -30, right: -60 }}>
+          <Parallax speed={-0.16} float style={{ bottom: -30, right: -60 }}>
             <CrescentAccent size={130} opacity={.09} />
           </Parallax>
         </>
       )}
       {decor === "right" && (
         <>
-          <Parallax speed={0.2} style={{ top: -50, right: -70 }}>
+          <Parallax speed={0.2} float style={{ top: -50, right: -70 }}>
             <SakuraBranch width={230} flip opacity={.16} />
           </Parallax>
-          <Parallax speed={-0.18} style={{ bottom: 10, left: -40 }}>
+          <Parallax speed={-0.18} float style={{ bottom: 10, left: -40 }}>
             <Lantern size={80} opacity={.12} />
           </Parallax>
         </>
       )}
       {decor === "both" && (
         <>
-          <Parallax speed={0.24} style={{ top: -46, left: -70 }}>
+          <Parallax speed={0.24} float style={{ top: -46, left: -70 }}>
             <SakuraBranch width={210} opacity={.15} />
           </Parallax>
-          <Parallax speed={0.18} style={{ top: -30, right: -60 }}>
+          <Parallax speed={0.18} float style={{ top: -30, right: -60 }}>
             <SakuraBranch width={210} flip opacity={.15} />
           </Parallax>
-          <Parallax speed={-0.2} style={{ bottom: -10, left: "45%" }}>
+          <Parallax speed={-0.2} float style={{ bottom: -10, left: "45%" }}>
             <CrescentAccent size={100} opacity={.08} />
           </Parallax>
         </>
@@ -734,17 +984,58 @@ function Band({ children, id, alt, style, divider, lattice, decor }) {
 }
 
 function Eyebrow({ children }) {
+  const reduced = useReducedMotion();
+  const [ref, inView] = useInView({ threshold: 0.4 });
+  const show = reduced || inView;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-      <Star8 size={16} />
+    <div ref={ref} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+      {/* star spins gently into place */}
+      <span style={{
+        display: "inline-flex",
+        opacity: show ? 1 : 0,
+        transform: show ? "rotate(0deg) scale(1)" : "rotate(-90deg) scale(.4)",
+        transition: reduced ? "none"
+          : `opacity ${DUR.base}ms ${EASE.out}, transform ${DUR.slow}ms ${EASE.spring}`,
+      }}><Star8 size={16} /></span>
       <span style={{ textTransform: "uppercase", letterSpacing: "2px", fontSize: 12.5,
-        fontWeight: 700, color: GOLD }}>{children}</span>
+        fontWeight: 700, color: GOLD,
+        opacity: show ? 1 : 0,
+        transform: show ? "translate3d(0,0,0)" : "translate3d(-10px,0,0)",
+        transition: reduced ? "none"
+          : `opacity ${DUR.base}ms ${EASE.out} 90ms, transform ${DUR.base}ms ${EASE.out} 90ms`,
+      }}>{children}</span>
+      {/* hairline rule that draws outward */}
+      <span aria-hidden="true" style={{ flex: 1, height: 1, marginLeft: 4,
+        background: `linear-gradient(90deg, ${GOLD}, transparent)`,
+        transformOrigin: "0 50%",
+        transform: show ? "scaleX(1)" : "scaleX(0)",
+        opacity: .45,
+        transition: reduced ? "none" : `transform ${DUR.slow}ms ${EASE.outSoft} 160ms`,
+      }} />
     </div>
   );
 }
-function Title({ children }) {
-  return <h2 style={{ fontSize: "clamp(28px,4vw,42px)", fontWeight: 800, color: PURPLE,
-    margin: "0 0 16px", letterSpacing: "-1px", lineHeight: 1.1 }}>{children}</h2>;
+
+function Title({ children, delay = 0 }) {
+  const isText = typeof children === "string";
+  return (
+    <h2 style={{ fontSize: "clamp(28px,4vw,42px)", fontWeight: 800, color: PURPLE,
+      margin: "0 0 16px", letterSpacing: "-1px", lineHeight: 1.1 }}>
+      {isText
+        ? <TextReveal text={children} delay={delay + 90} step={48} />
+        : <Reveal delay={delay + 90} variant="up" distance={20}>{children}</Reveal>}
+    </h2>
+  );
+}
+
+/* Lead paragraph under a Title — reveals just after it. */
+function Lead({ children, delay = 260, style }) {
+  return (
+    <Reveal delay={delay} variant="up" distance={18}>
+      <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5,
+        lineHeight: 1.65, ...style }}>{children}</p>
+    </Reveal>
+  );
 }
 
 /* ---------- HOME ---------- */
@@ -754,41 +1045,44 @@ function HomeSection({ data, onNav }) {
       <section id="home" style={{ position: "relative", overflow: "hidden",
         background: GRAD_DEEP,
         color: "#fff", padding: "104px 20px 0" }}>
+        <AmbientGlow />
         <PatternField />
-        <CherryBlossoms count={16} />
-        {/* central mihrab arch silhouette framing the hero content */}
-        <div aria-hidden="true" style={{ position: "absolute", top: 40, left: "50%",
-          transform: "translateX(-50%)", width: "min(560px, 88%)", height: "82%",
-          opacity: 0.5, pointerEvents: "none" }}>
-          <Arch w={200} h={280} spring={150} stroke={`rgba(201,182,136,.5)`} sw={1.2}
-            style={{ width: "100%", height: "100%" }} />
-        </div>
+        <CherryBlossoms count={22} />
+        {/* central mihrab arch silhouette — strokes draw themselves in */}
+        <HeroArch />
         <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2,
           textAlign: "center", paddingBottom: 90 }}>
-          <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo" className="reveal"
-            style={{ width: 132, height: 132, borderRadius: 24, objectFit: "cover", marginBottom: 26,
-              boxShadow: "0 12px 40px rgba(0,0,0,.5)", border: "1px solid rgba(201,182,136,.3)" }} />
-          <div className="reveal" style={{ animationDelay: ".06s", display: "inline-flex", alignItems: "center", gap: 8,
-            padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
-            border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24, marginLeft: "auto",
-            marginRight: "auto" }}>
-            <Star8 size={16} color={GOLD} /> <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".5px" }}>
-              Est. at the University of Washington</span>
-          </div>
-          <h1 className="reveal" style={{ animationDelay: ".08s", fontSize: "clamp(32px,5.5vw,58px)",
-            fontWeight: 800, lineHeight: 1.08, letterSpacing: "-1.5px", margin: "0 0 22px" }}>
-            {data.hero.title}
+          <HeroIntro delay={120}>
+            <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="MSA at UW logo"
+              style={{ width: 132, height: 132, borderRadius: 24, objectFit: "cover", marginBottom: 26,
+                boxShadow: "0 12px 40px rgba(0,0,0,.5)", border: "1px solid rgba(201,182,136,.3)" }} />
+          </HeroIntro>
+          <HeroIntro delay={300} variant="scale">
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
+              border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24 }}>
+              <Star8 size={16} color={GOLD} /> <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".5px" }}>
+                Est. at the University of Washington</span>
+            </div>
+          </HeroIntro>
+          <h1 style={{ fontSize: "clamp(32px,5.5vw,58px)", fontWeight: 800, lineHeight: 1.08,
+            letterSpacing: "-1.5px", margin: "0 0 22px" }}>
+            <HeroWords text={data.hero.title} delay={430} step={62} />
           </h1>
-          <p className="reveal" style={{ animationDelay: ".16s", fontSize: "clamp(16px,2vw,20px)",
-            color: "rgba(255,255,255,.85)", maxWidth: 640, margin: "0 auto 36px", lineHeight: 1.6 }}>
-            {data.hero.mission}
-          </p>
-          <div className="reveal" style={{ animationDelay: ".24s", display: "flex", gap: 14,
-            justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => onNav("connect")} style={btnGold}>Join MSA</button>
-            <button onClick={() => onNav("events")} style={btnGhost}>See what's on</button>
-          </div>
+          <HeroIntro delay={900}>
+            <p style={{ fontSize: "clamp(16px,2vw,20px)", color: "rgba(255,255,255,.85)",
+              maxWidth: 640, margin: "0 auto 36px", lineHeight: 1.6 }}>
+              {data.hero.mission}
+            </p>
+          </HeroIntro>
+          <HeroIntro delay={1060}>
+            <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+              <button className="btn" onClick={() => onNav("connect")} style={btnGold}>Join MSA</button>
+              <button className="btn" onClick={() => onNav("events")} style={btnGhost}>See what's on</button>
+            </div>
+          </HeroIntro>
         </div>
+        <ScrollCue onClick={() => onNav("gallery")} />
         {/* girih band along the base of the hero */}
         <div style={{ position: "relative" }}>
           <GirihBand color="rgba(183,165,122,.45)" height={54} opacity={1} unit={54} />
@@ -799,9 +1093,7 @@ function HomeSection({ data, onNav }) {
       <Band id="gallery" lattice decor="left">
         <Eyebrow>Our community</Eyebrow>
         <Title>Moments from the year</Title>
-        <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
-          Eid celebrations, Jummah, retreats, and the everyday gatherings that make MSA home.
-        </p>
+        <Lead>Eid celebrations, Jummah, retreats, and the everyday gatherings that make MSA home.</Lead>
         <Gallery items={data.gallery} />
       </Band>
 
@@ -813,7 +1105,7 @@ function HomeSection({ data, onNav }) {
           gap: 16, marginTop: 32 }}>
           {data.sponsors.map((s, n) => {
             const inner = s.logo ? (
-              <img src={s.logo} alt={s.name}
+              <img src={s.logo} alt={s.name} className="sponsorlogo"
                 style={{ maxHeight: 60, maxWidth: "100%", objectFit: "contain" }} />
             ) : (
               <span style={{ fontWeight: 700, color: PURPLE, fontSize: 15 }}>{s.name}</span>
@@ -821,7 +1113,7 @@ function HomeSection({ data, onNav }) {
             const boxStyle = { ...card, display: "grid", placeItems: "center",
               height: 96, textAlign: "center", padding: 16, textDecoration: "none" };
             return (
-              <Reveal key={s.id} delay={n * 60}>
+              <Reveal key={s.id} delay={n * 70} variant="scale" distance={22} duration={DUR.slow}>
                 {s.url ? (
                   <a href={s.url} target="_blank" rel="noopener noreferrer"
                     className="lift" style={boxStyle} title={`Visit ${s.name}`}>{inner}</a>
@@ -832,21 +1124,163 @@ function HomeSection({ data, onNav }) {
             );
           })}
         </div>
-        <div style={{ marginTop: 40, ...card, padding: "32px 28px", display: "flex",
-          alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap",
-          background: `linear-gradient(120deg, rgba(75,46,131,.05), rgba(183,165,122,.08))` }}>
-          <div>
-            <h3 style={{ margin: "0 0 6px", color: PURPLE, fontSize: 21, fontWeight: 700 }}>
-              Support the MSA</h3>
-            <p style={{ margin: 0, color: "#5a5468" }}>Your donation funds events, iftars, and student programs.</p>
+        <Reveal variant="rise" distance={30} duration={DUR.slow} delay={120}>
+          <div style={{ marginTop: 40, ...card, padding: "32px 28px", display: "flex",
+            alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap",
+            position: "relative", overflow: "hidden",
+            background: `linear-gradient(120deg, rgba(75,46,131,.05), rgba(183,165,122,.08))` }}>
+            <div aria-hidden="true" style={{ position: "absolute", right: -30, top: -40, opacity: .07 }}>
+              <Star8 size={190} color={PURPLE} />
+            </div>
+            <div style={{ position: "relative" }}>
+              <h3 style={{ margin: "0 0 6px", color: PURPLE, fontSize: 21, fontWeight: 700 }}>
+                Support the MSA</h3>
+              <p style={{ margin: 0, color: "#5a5468" }}>Your donation funds events, iftars, and student programs.</p>
+            </div>
+            <a className="btn" href="https://www.zeffy.com/en-US/donation-form/44131d7a-557e-4fdc-9a70-14e9f67206ef"
+               target="_blank" rel="noopener noreferrer"
+               style={{ ...btnGold, position: "relative", textDecoration: "none",
+                 display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <Heart size={18} /> Donate
+            </a>
           </div>
-          <a href="https://www.zeffy.com/en-US/donation-form/44131d7a-557e-4fdc-9a70-14e9f67206ef" target="_blank" rel="noopener noreferrer"
-             style={{ ...btnGold, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Heart size={18} /> Donate
-          </a>
-        </div>
+        </Reveal>
       </Band>
     </>
+  );
+}
+
+/* ── Hero entrance primitives ───────────────────────────────────────────
+   The hero animates on mount (not on scroll — it's already in view), so
+   these use a timed reveal rather than IntersectionObserver. */
+function HeroIntro({ children, delay = 0, variant = "up", distance = 24,
+  duration = DUR.hero, style }) {
+  const reduced = useReducedMotion();
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (reduced) { setShow(true); return; }
+    const t = setTimeout(() => setShow(true), 40);
+    return () => clearTimeout(t);
+  }, [reduced]);
+  const from = variant === "scale"
+    ? "translate3d(0,14px,0) scale(.94)"
+    : `translate3d(0,${distance}px,0)`;
+  return (
+    <div style={{
+      opacity: show ? 1 : 0,
+      transform: show ? "translate3d(0,0,0) scale(1)" : from,
+      transition: reduced ? "none"
+        : `opacity ${duration}ms ${EASE.outSoft} ${delay}ms, transform ${duration}ms ${EASE.outSoft} ${delay}ms`,
+      ...style,
+    }}>{children}</div>
+  );
+}
+
+/* Headline words rising in sequence from behind a mask. */
+function HeroWords({ text, delay = 0, step = 60 }) {
+  const reduced = useReducedMotion();
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (reduced) { setShow(true); return; }
+    const t = setTimeout(() => setShow(true), 40);
+    return () => clearTimeout(t);
+  }, [reduced]);
+  const words = String(text).split(" ");
+  return (
+    <>
+      {words.map((w, i) => (
+        <span key={i} style={{ display: "inline-block", overflow: "hidden", verticalAlign: "top" }}>
+          <span style={{
+            display: "inline-block",
+            opacity: show ? 1 : 0,
+            transform: show ? "translate3d(0,0,0)" : "translate3d(0,1em,0)",
+            transition: reduced ? "none"
+              : `opacity ${DUR.slow}ms ${EASE.outSoft} ${delay + i * step}ms, transform ${DUR.slow}ms ${EASE.outSoft} ${delay + i * step}ms`,
+          }}>{w}</span>
+          {i < words.length - 1 && <span>&nbsp;</span>}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/* Mihrab arch whose outline draws itself, then breathes gently. */
+function HeroArch() {
+  const reduced = useReducedMotion();
+  const [drawn, setDrawn] = useState(false);
+  useEffect(() => {
+    if (reduced) { setDrawn(true); return; }
+    const t = setTimeout(() => setDrawn(true), 120);
+    return () => clearTimeout(t);
+  }, [reduced]);
+  return (
+    <div aria-hidden="true" className={reduced ? "" : "floaty-slow"}
+      style={{ position: "absolute", top: 40, left: "50%",
+        transform: "translateX(-50%)", width: "min(560px, 88%)", height: "82%",
+        opacity: 0.5, pointerEvents: "none" }}>
+      <svg viewBox="0 0 200 280" width="100%" height="100%" preserveAspectRatio="none">
+        <path d={archPath(200, 280, 150)} fill="none" stroke="rgba(201,182,136,.5)"
+          strokeWidth="1.2" pathLength="1"
+          style={{
+            strokeDasharray: 1,
+            strokeDashoffset: drawn ? 0 : 1,
+            transition: reduced ? "none" : `stroke-dashoffset 2600ms ${EASE.outSoft} 200ms`,
+          }} />
+      </svg>
+    </div>
+  );
+}
+
+/* Two very slow, very soft colour blooms behind the hero. Pure transform
+   animation on blurred radial gradients — cheap and adds real depth. */
+function AmbientGlow({ subtle = false }) {
+  const reduced = useReducedMotion();
+  if (reduced) return null;
+  const k = subtle ? 0.45 : 1;
+  const blob = (color, size) => ({
+    position: "absolute", width: size, height: size, borderRadius: "50%",
+    background: `radial-gradient(circle, ${color} 0%, transparent 68%)`,
+    filter: `blur(${subtle ? 60 : 48}px)`, pointerEvents: "none",
+  });
+  return (
+    <div aria-hidden="true" style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0 }}>
+      <div className="glow" style={{ ...blob(`rgba(140,120,180,${.42 * k})`, subtle ? 520 : 620),
+        top: "-18%", left: "-12%" }} />
+      <div className="glow" style={{ ...blob(`rgba(180,120,140,${.34 * k})`, subtle ? 440 : 520),
+        bottom: "-16%", right: "-10%", animationDelay: "-11s", animationDuration: "27s" }} />
+    </div>
+  );
+}
+
+/* A quiet nudge to scroll. Fades in last, drifts, hides once you move. */
+function ScrollCue({ onClick }) {
+  const reduced = useReducedMotion();
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const f = () => setHidden(window.scrollY > 80);
+    window.addEventListener("scroll", f, { passive: true });
+    return () => window.removeEventListener("scroll", f);
+  }, []);
+  return (
+    <button onClick={onClick} aria-label="Scroll to content"
+      style={{
+        position: "absolute", left: "50%", bottom: 74, zIndex: 3,
+        transform: "translateX(-50%)", background: "none", border: "none",
+        cursor: "pointer", padding: 10,
+        opacity: hidden ? 0 : 1,
+        pointerEvents: hidden ? "none" : "auto",
+        transition: `opacity ${DUR.base}ms ${EASE.out} ${hidden ? 0 : 1500}ms`,
+      }}>
+      <span className={reduced ? "" : "floaty"} style={{ display: "block" }}>
+        <svg width="26" height="38" viewBox="0 0 26 38" fill="none" aria-hidden="true">
+          <rect x="1" y="1" width="24" height="36" rx="12"
+            stroke="rgba(201,182,136,.55)" strokeWidth="1.4" />
+          <circle cx="13" cy="11" r="3" fill={GOLD}>
+            {!reduced && <animate attributeName="cy" values="11;22;11" dur="2.4s" repeatCount="indefinite" />}
+          </circle>
+        </svg>
+      </span>
+    </button>
   );
 }
 
@@ -864,17 +1298,29 @@ function PatternField() {
 
 function Gallery({ items }) {
   const [i, setI] = useState(0);
+  const [prev, setPrev] = useState(0);
   const [paused, setPaused] = useState(false);
+  const reduced = useReducedMotion();
+  const DWELL = 5600;
 
-  // Auto-advance every 5s; pauses on hover and when the tab is hidden.
+  const go = useCallback((n) => {
+    setI((cur) => {
+      if (n === cur) return cur;
+      setPrev(cur);
+      return (n + items.length) % items.length;
+    });
+  }, [items.length]);
+
+  // Auto-advance. Pauses on hover/focus, when the tab is hidden, and for
+  // reduced-motion users. Restarts cleanly whenever the slide changes.
   useEffect(() => {
-    if (paused || items.length < 2) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (paused || reduced || items.length < 2) return;
     const t = setInterval(() => {
-      if (!document.hidden) setI((n) => (n + 1) % items.length);
-    }, 5000);
+      if (!document.hidden) go(i + 1);
+    }, DWELL);
     return () => clearInterval(t);
-  }, [paused, items.length, i]);
+  }, [paused, reduced, items.length, i, go]);
+
   const grad = (n) => {
     const g = [
       `linear-gradient(135deg,${PURPLE},${VIOLET})`, `linear-gradient(135deg,${MAUVE},${PINK})`,
@@ -883,43 +1329,110 @@ function Gallery({ items }) {
     ];
     return g[n % g.length];
   };
+
   return (
-    <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      {/* featured carousel */}
-      <div style={{ position: "relative", borderRadius: 22, overflow: "hidden",
-        aspectRatio: "16 / 9",
-        background: grad(i), display: "grid", placeItems: "center", marginBottom: 16 }}>
-        {items[i].img && (
-          <img src={items[i].img} alt={items[i].caption}
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-        )}
-        {!items[i].img && <div style={{ position: "absolute", inset: 0, opacity: .15 }}><PatternField /></div>}
-        <div style={{ position: "relative", textAlign: "center", color: "#fff",
-          textShadow: items[i].img ? "0 2px 12px rgba(0,0,0,.6)" : "none",
-          background: items[i].img ? "linear-gradient(transparent, rgba(0,0,0,.4))" : "none",
-          width: "100%", height: "100%", display: "grid", placeItems: "center", alignContent: "end",
-          paddingBottom: items[i].img ? 28 : 0 }}>
-          {!items[i].img && <Star8 size={54} color="#fff" opacity={.9} />}
-          <div style={{ marginTop: 14, fontSize: 13, letterSpacing: "2px", textTransform: "uppercase",
-            color: "rgba(255,255,255,.85)" }}>{items[i].tag}</div>
-          <div style={{ fontSize: 26, fontWeight: 700, marginTop: 4 }}>{items[i].caption}</div>
+    <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+         onFocusCapture={() => setPaused(true)} onBlurCapture={() => setPaused(false)}>
+      {/* Featured slide — every slide is layered and crossfaded, so there is
+          never a hard swap. The active slide also drifts (Ken Burns). */}
+      <Reveal variant="rise" distance={34} duration={DUR.slow}>
+        <div style={{ position: "relative", borderRadius: 22, overflow: "hidden",
+          aspectRatio: "16 / 9", background: grad(i), marginBottom: 16,
+          boxShadow: "0 24px 60px rgba(20,17,24,.22)" }}>
+
+          {items.map((it, n) => {
+            const active = n === i;
+            const wasActive = n === prev;
+            return (
+              <div key={it.id ?? n} aria-hidden={!active} style={{
+                position: "absolute", inset: 0,
+                background: grad(n),
+                opacity: active ? 1 : 0,
+                transition: reduced ? "none"
+                  : `opacity 900ms ${EASE.outSoft}`,
+                zIndex: active ? 2 : wasActive ? 1 : 0,
+              }}>
+                {it.img ? (
+                  <img src={it.img} alt={it.caption} loading={active ? "eager" : "lazy"}
+                    style={{
+                      position: "absolute", inset: 0, width: "100%", height: "100%",
+                      objectFit: "cover",
+                      transform: active ? "scale(1.06)" : "scale(1)",
+                      transition: reduced ? "none" : `transform ${DWELL + 1800}ms linear`,
+                      willChange: "transform",
+                    }} />
+                ) : (
+                  <div style={{ position: "absolute", inset: 0, opacity: .15 }}><PatternField /></div>
+                )}
+                {/* readability scrim */}
+                <div style={{ position: "absolute", inset: 0,
+                  background: it.img
+                    ? "linear-gradient(to top, rgba(20,17,24,.62) 0%, rgba(20,17,24,.12) 42%, transparent 68%)"
+                    : "none" }} />
+              </div>
+            );
+          })}
+
+          {/* Caption — re-animates on each slide change via the key */}
+          <div key={i} style={{ position: "absolute", inset: 0, zIndex: 3,
+            display: "grid", placeItems: "center", alignContent: "end",
+            textAlign: "center", color: "#fff", paddingBottom: 34,
+            pointerEvents: "none" }}>
+            {!items[i].img && <Star8 size={54} color="#fff" opacity={.9} />}
+            <div style={{ fontSize: 13, letterSpacing: "2px", textTransform: "uppercase",
+              color: "rgba(255,255,255,.85)",
+              animation: reduced ? "none" : `rise ${DUR.slow}ms ${EASE.outSoft} 120ms both` }}>
+              {items[i].tag}</div>
+            <div style={{ fontSize: "clamp(20px,2.6vw,28px)", fontWeight: 700, marginTop: 6,
+              textShadow: "0 2px 18px rgba(0,0,0,.5)",
+              animation: reduced ? "none" : `rise ${DUR.slow}ms ${EASE.outSoft} 210ms both` }}>
+              {items[i].caption}</div>
+          </div>
+
+          <button className="btn" onClick={() => go(i - 1)} aria-label="Previous photo"
+            style={carBtn("left")}><ChevronLeft size={22} color={PURPLE} /></button>
+          <button className="btn" onClick={() => go(i + 1)} aria-label="Next photo"
+            style={carBtn("right")}><ChevronRight size={22} color={PURPLE} /></button>
+
+          {/* Progress dots — active one stretches into a bar */}
+          <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, zIndex: 4,
+            display: "flex", justifyContent: "center", gap: 7 }}>
+            {items.map((_, n) => (
+              <button key={n} onClick={() => go(n)} aria-label={`Photo ${n + 1}`}
+                style={{ width: 26, height: 8, borderRadius: 99, border: "none",
+                  background: "transparent", cursor: "pointer", padding: 0,
+                  display: "grid", placeItems: "center" }}>
+                {/* scaleX rather than width so the dot never triggers layout */}
+                <span aria-hidden="true" style={{ display: "block", width: 26, height: 8,
+                  borderRadius: 99, transformOrigin: "50% 50%",
+                  transform: n === i ? "scaleX(1)" : "scaleX(.31)",
+                  background: n === i ? GOLD : "rgba(255,255,255,.55)",
+                  transition: `transform ${DUR.base}ms ${EASE.out}, background ${DUR.base}ms ${EASE.out}` }} />
+              </button>
+            ))}
+          </div>
         </div>
-        <button onClick={() => setI((i - 1 + items.length) % items.length)} aria-label="Previous"
-          style={carBtn("left")}><ChevronLeft size={22} color={PURPLE} /></button>
-        <button onClick={() => setI((i + 1) % items.length)} aria-label="Next"
-          style={carBtn("right")}><ChevronRight size={22} color={PURPLE} /></button>
-      </div>
-      {/* thumbs */}
+      </Reveal>
+
+      {/* Thumbnails — stagger in, and the active one lifts */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(90px,1fr))", gap: 10 }}>
         {items.map((it, n) => (
-          <button key={it.id} onClick={() => setI(n)} aria-label={it.caption}
-            style={{ height: 66, borderRadius: 12, border: n === i ? `3px solid ${GOLD}` : "3px solid transparent",
-              background: grad(n), cursor: "pointer", padding: 0, position: "relative", overflow: "hidden" }}>
-            {it.img && <img src={it.img} alt={it.caption}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
-            <span style={{ position: "absolute", bottom: 4, left: 6, fontSize: 10.5, fontWeight: 600,
-              color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,.7)", zIndex: 1 }}>{it.tag}</span>
-          </button>
+          <Reveal key={it.id ?? n} delay={n * 60} variant="up" distance={16} duration={DUR.base}>
+            <button onClick={() => go(n)} aria-label={it.caption} className="zoomable"
+              style={{ width: "100%", height: 66, borderRadius: 12,
+                border: n === i ? `2px solid ${GOLD}` : "2px solid transparent",
+                background: grad(n), cursor: "pointer", padding: 0,
+                position: "relative", overflow: "hidden",
+                opacity: n === i ? 1 : .72,
+                transform: n === i ? "translate3d(0,-3px,0)" : "none",
+                boxShadow: n === i ? "0 10px 24px rgba(75,46,131,.24)" : "none",
+                transition: `opacity ${DUR.fast}ms ${EASE.out}, transform ${DUR.fast}ms ${EASE.out}, border-color ${DUR.fast}ms ${EASE.out}, box-shadow ${DUR.fast}ms ${EASE.out}` }}>
+              {it.img && <img src={it.img} alt="" loading="lazy"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+              <span style={{ position: "absolute", bottom: 4, left: 6, fontSize: 10.5, fontWeight: 600,
+                color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,.7)", zIndex: 1 }}>{it.tag}</span>
+            </button>
+          </Reveal>
         ))}
       </div>
     </div>
@@ -980,8 +1493,9 @@ function PrayerSection({ data }) {
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 24, marginTop: 32,
         alignItems: "start" }} className="prayer-grid">
         <div style={{ display: "grid", gap: 16 }}>
-          {data.prayerSpaces.map((s) => (
-            <div key={s.id} className="lift" style={{ ...card, padding: "22px 24px", display: "flex", gap: 16 }}>
+          {data.prayerSpaces.map((s, n) => (
+            <Reveal key={s.id} delay={n * 70} variant="left" distance={22}>
+            <div className="lift" style={{ ...card, padding: "22px 24px", display: "flex", gap: 16 }}>
               <div style={{ flexShrink: 0, width: 46, height: 56, position: "relative",
                 display: "grid", placeItems: "center" }}>
                 <div style={{ position: "absolute", inset: 0 }}>
@@ -996,10 +1510,13 @@ function PrayerSection({ data }) {
                 <div style={{ color: "#8a8498", fontSize: 13.5 }}>{s.note}</div>
               </div>
             </div>
+            </Reveal>
           ))}
         </div>
 
-        <div style={{ ...card, padding: 0, overflow: "hidden", position: "sticky", top: 90 }}>
+        <Reveal variant="right" distance={26} delay={140} duration={DUR.slow}
+          style={{ position: "sticky", top: 90 }}>
+        <div style={{ ...card, padding: 0, overflow: "hidden" }}>
           <div style={{ background: GRAD_DEEP, color: "#fff",
             padding: "22px 24px", position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", right: -20, top: -20, opacity: .2 }}>
@@ -1043,6 +1560,7 @@ function PrayerSection({ data }) {
             </div>
           )}
         </div>
+        </Reveal>
       </div>
       <style>{`@media (max-width:820px){.prayer-grid{grid-template-columns:1fr !important;}}`}</style>
     </Band>
@@ -1055,16 +1573,14 @@ function EventsSection({ data }) {
     <Band id="events" divider lattice decor="both">
       <Eyebrow>This week</Eyebrow>
       <Title>Weekly calendar</Title>
-      <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
-        Everything happening across the week — drop in anytime.
-      </p>
+      <Lead>Everything happening across the week — drop in anytime.</Lead>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 16 }}>
         {DAYS.map((day, dn) => {
           const evs = data.events[day] || [];
           const isFri = day === "Friday";
           return (
-            <Reveal key={day} delay={dn * 60}>
-            <div style={{ ...card, padding: 0, overflow: "hidden",
+            <Reveal key={day} delay={dn * 75} variant="rise" distance={28} duration={DUR.slow}>
+            <div className="eventcard" style={{ ...card, padding: 0, overflow: "hidden", height: "100%",
               border: isFri ? `2px solid ${GOLD}` : card.border }}>
               <div style={{ padding: "12px 18px", background: isFri ? "rgba(183,165,122,.15)" : "rgba(75,46,131,.05)",
                 display: "flex", alignItems: "center", gap: 8 }}>
@@ -1108,28 +1624,41 @@ function ProgramsSection({ data }) {
     <Band id="programs" alt divider lattice decor="right">
       <Eyebrow>Get involved</Eyebrow>
       <Title>Our programs</Title>
-      <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
-        Ways to grow, give back, and connect throughout the year.
-      </p>
+      <Lead>Ways to grow, give back, and connect throughout the year.</Lead>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 20 }}>
         {data.programs.map((p, n) => (
-          <Reveal key={p.id} delay={n * 70}>
-          <div className="lift" style={{ ...card, padding: "26px 24px" }}>
-            <div style={{ width: 54, height: 62, position: "relative", display: "grid",
-              placeItems: "center", marginBottom: 16 }}>
-              <div style={{ position: "absolute", inset: 0 }}>
-                <Arch w={54} h={62} spring={38} stroke={`rgba(183,165,122,.5)`} sw={1.2}
-                  fill="rgba(183,165,122,.15)" style={{ width: "100%", height: "100%" }} />
-              </div>
-              <div style={{ position: "relative", marginTop: 8 }}>{progIcon(p.icon)}</div>
-            </div>
-            <h3 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 700, color: PURPLE }}>{p.name}</h3>
-            <p style={{ margin: 0, color: "#5a5468", fontSize: 14.5, lineHeight: 1.6 }}>{p.desc}</p>
-          </div>
+          <Reveal key={p.id} delay={n * 85} variant="rise" distance={30} duration={DUR.slow}>
+            <ProgramCard program={p} />
           </Reveal>
         ))}
       </div>
     </Band>
+  );
+}
+
+/* Program card — the arch fills and the icon lifts on hover. */
+function ProgramCard({ program: p }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div className="lift" style={{ ...card, padding: "26px 24px", height: "100%" }}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <div style={{ width: 54, height: 62, position: "relative", display: "grid",
+        placeItems: "center", marginBottom: 16 }}>
+        <div style={{ position: "absolute", inset: 0,
+          transform: hover ? "translate3d(0,-3px,0) scale(1.06)" : "none",
+          transition: `transform ${DUR.base}ms ${EASE.spring}` }}>
+          <Arch w={54} h={62} spring={38}
+            stroke={hover ? "rgba(183,165,122,.85)" : "rgba(183,165,122,.5)"} sw={1.2}
+            fill={hover ? "rgba(183,165,122,.26)" : "rgba(183,165,122,.15)"}
+            style={{ width: "100%", height: "100%", transition: `all ${DUR.base}ms ${EASE.out}` }} />
+        </div>
+        <div style={{ position: "relative", marginTop: 8,
+          transform: hover ? "translate3d(0,-3px,0)" : "none",
+          transition: `transform ${DUR.base}ms ${EASE.spring}` }}>{progIcon(p.icon)}</div>
+      </div>
+      <h3 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 700, color: PURPLE }}>{p.name}</h3>
+      <p style={{ margin: 0, color: "#5a5468", fontSize: 14.5, lineHeight: 1.6 }}>{p.desc}</p>
+    </div>
   );
 }
 
@@ -1143,30 +1672,46 @@ function ConnectSection({ data }) {
     <Band id="connect" lattice decor="left">
       <Eyebrow>Connect</Eyebrow>
       <Title>Find your people</Title>
-      <p style={{ color: "#5a5468", maxWidth: 560, margin: "0 0 36px", fontSize: 16.5 }}>
-        Join the group chats, follow along, and support the community.
-      </p>
+      <Lead>Join the group chats, follow along, and support the community.</Lead>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 16 }}>
         {data.links.map((l, n) => (
-          <Reveal key={l.id} delay={n * 55}>
-          <a href={l.href} target="_blank" rel="noopener noreferrer" className="lift"
-            style={{ ...card, padding: "22px 24px", display: "flex", alignItems: "center", gap: 16,
-              textDecoration: "none" }}>
-            <div style={{ width: 50, height: 50, borderRadius: 13, background: bg(l.kind),
-              display: "grid", placeItems: "center", flexShrink: 0 }}>
-              {linkIcon(l.kind)}
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, color: "#2c2640", fontSize: 16 }}>{l.name}</div>
-              <div style={{ color: PURPLE, fontSize: 13, fontWeight: 600, display: "flex",
-                alignItems: "center", gap: 4, marginTop: 2 }}>
-                Open <ExternalLink size={12} /></div>
-            </div>
-          </a>
+          <Reveal key={l.id} delay={n * 65} variant="rise" distance={26}>
+            <LinkCard link={l} bg={bg(l.kind)} />
           </Reveal>
         ))}
       </div>
     </Band>
+  );
+}
+
+/* Connect card — icon tile tilts, arrow slides out on hover. */
+function LinkCard({ link: l, bg }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <a href={l.href} target="_blank" rel="noopener noreferrer" className="lift"
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ ...card, padding: "22px 24px", display: "flex", alignItems: "center", gap: 16,
+        textDecoration: "none", height: "100%" }}>
+      <div style={{ width: 50, height: 50, borderRadius: 13, background: bg,
+        display: "grid", placeItems: "center", flexShrink: 0,
+        transform: hover ? "translate3d(0,-2px,0) scale(1.07) rotate(-3deg)" : "none",
+        boxShadow: hover ? "0 10px 22px rgba(20,17,24,.22)" : "0 0 0 rgba(0,0,0,0)",
+        transition: `transform ${DUR.base}ms ${EASE.spring}, box-shadow ${DUR.base}ms ${EASE.out}` }}>
+        {linkIcon(l.kind)}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontWeight: 700, color: "#2c2640", fontSize: 16 }}>{l.name}</div>
+        <div style={{ color: PURPLE, fontSize: 13, fontWeight: 600, display: "flex",
+          alignItems: "center", gap: 4, marginTop: 2 }}>
+          Open
+          <span style={{ display: "inline-flex",
+            transform: hover ? "translate3d(4px,-2px,0)" : "none",
+            transition: `transform ${DUR.base}ms ${EASE.spring}` }}>
+            <ExternalLink size={12} />
+          </span>
+        </div>
+      </div>
+    </a>
   );
 }
 
@@ -1186,7 +1731,7 @@ function Footer({ onAdmin }) {
               <div style={{ fontSize: 13 }}>Muslim Student Association · University of Washington</div>
             </div>
           </div>
-          <button onClick={onAdmin} style={{ display: "flex", alignItems: "center", gap: 7,
+          <button className="btn" onClick={onAdmin} style={{ display: "flex", alignItems: "center", gap: 7,
             background: "rgba(201,182,136,.14)", border: "1px solid rgba(201,182,136,.3)", color: GOLD,
             padding: "10px 16px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
             fontSize: 14, fontWeight: 600 }}>
@@ -1234,12 +1779,13 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
   };
 
   return (
-    <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(20,12,40,.55)", backdropFilter: "blur(4px)", display: "grid",
+    <div role="dialog" aria-modal="true" className="modalBg" style={{ position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(20,12,40,.55)", backdropFilter: "blur(5px)", display: "grid",
       placeItems: "center", padding: 16 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20,
+      <div onClick={(e) => e.stopPropagation()} className="modalIn" style={{ background: "#fff", borderRadius: 20,
         width: "100%", maxWidth: isAdmin ? 880 : 420, maxHeight: "90vh", overflow: "hidden",
-        display: "flex", flexDirection: "column", boxShadow: "0 30px 80px rgba(0,0,0,.4)" }}>
+        display: "flex", flexDirection: "column", boxShadow: "0 30px 80px rgba(0,0,0,.4)",
+        transition: `max-width ${DUR.base}ms ${EASE.out}` }}>
 
         <div style={{ padding: "18px 24px", borderBottom: "1px solid rgba(0,0,0,.08)",
           display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -1249,7 +1795,7 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
             <span style={{ fontWeight: 700, fontSize: 17 }}>
               {isAdmin ? "Admin dashboard" : "Admin login"}</span>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,.15)",
+          <button className="btn" onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,.15)",
             border: "none", borderRadius: 8, width: 34, height: 34, cursor: "pointer",
             display: "grid", placeItems: "center" }}>
             <X size={18} color="#fff" /></button>
@@ -1267,7 +1813,7 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
               onKeyDown={(e) => e.key === "Enter" && login()}
               placeholder="Password" autoComplete="current-password" style={inp} />
             {err && <div style={{ color: "#c0392b", fontSize: 13.5, marginTop: 10 }}>{err}</div>}
-            <button onClick={login} disabled={busy}
+            <button className="btn" onClick={login} disabled={busy}
               style={{ ...btnPurple, width: "100%", marginTop: 16, opacity: busy ? .6 : 1 }}>
               {busy ? "Signing in…" : "Log in"}</button>
             <p style={{ margin: "16px 0 0", fontSize: 12, color: "#b0aac0", lineHeight: 1.5 }}>
@@ -1302,7 +1848,7 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
                 background: "#faf9fc", flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13, color: savedMsg.startsWith("Save failed") ? "#c0392b" : "#5a5468" }}>
                   {savedMsg || "Edit below, then Save to publish to the live site."}</span>
-                <button onClick={save} disabled={saving}
+                <button className="btn" onClick={save} disabled={saving}
                   style={{ ...btnPurple, display: "inline-flex", alignItems: "center", gap: 7,
                     opacity: saving ? .6 : 1 }}>
                   <Save size={15} /> {saving ? "Saving…" : "Save changes"}</button>
@@ -1527,7 +2073,7 @@ function ListEditor({ title, items, onChange, blank, fields }) {
   const edit = (i, key, val) => { const c = [...items]; c[i] = { ...c[i], [key]: val }; onChange(c); };
   return (
     <Section title={title}>
-      <button onClick={add} style={{ ...btnPurple, marginBottom: 16, display: "inline-flex",
+      <button className="btn" onClick={add} style={{ ...btnPurple, marginBottom: 16, display: "inline-flex",
         alignItems: "center", gap: 6 }}><Plus size={16} /> Add</button>
       <div style={{ display: "grid", gap: 14 }}>
         {items.map((it, i) => (
