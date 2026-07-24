@@ -8,6 +8,7 @@ const QuadTree = React.lazy(() => import("./QuadTree.jsx"));
 // 3D cursor tilt on the medallion, magnetic CTAs. Self-contained — no
 // external files required beyond the animejs package itself.
 import { animate, createTimeline, stagger, utils } from "animejs";
+import ParticleLogo from "./components/ParticleLogo";
 import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
@@ -60,7 +61,6 @@ const NAV = [
     label: "More", children: [
       { id: "announcements", label: "Announcements" },
       { id: "connect", label: "Connect" },
-      { id: "contact", label: "Contact" },
       { id: "merch", label: "Merch", external: true, href: MERCH_URL },
     ],
   },
@@ -1211,7 +1211,6 @@ export default function App() {
         <BoardSection data={data} />
         <ConnectSection data={data} />
         <MailingList data={data} />
-        <ContactSection data={data} />
       </main>
       <Footer onAdmin={() => setAdminOpen(true)} data={data} onNav={scrollTo} />
       {adminOpen && (
@@ -2108,7 +2107,10 @@ function HomeSection({ data, onNav, curtainDone }) {
         <HeroArch />
         <div ref={stageRef} style={{ maxWidth: 960, margin: "0 auto", position: "relative", zIndex: 2,
           textAlign: "center", paddingBottom: 90 }}>
-          <div className="hero-logo" style={{ opacity: 0 }}><AnimatedLogo /></div>
+          <div className="hero-logo" style={{ opacity: 0, position: "relative",
+            height: 420, maxWidth: 640, margin: "0 auto" }}>
+            <ParticleLogo />
+          </div>
           <div className="hero-kicker" style={{ opacity: 0, display: "inline-flex", alignItems: "center", gap: 8,
             padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
             border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24 }}>
@@ -3876,51 +3878,6 @@ function IslamicHouseSection({ data }) {
   );
 }
 
-/* ---------- CONTACT ---------- */
-function ContactSection({ data }) {
-  const c = data.contact || seed.contact;
-  const socials = (data.links || []).filter((l) =>
-    ["instagram", "discord", "facebook"].includes(l.kind));
-  return (
-    <Band id="contact" alt lattice rosettes="wide" decor="left" light lightTone="rose" lightAt="top-right">
-      <SectionCopy data={data} sectionKey="contact" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
-        gap: 18 }}>
-        <Reveal variant="rise" distance={26}>
-          <a className="lift" href={`mailto:${c.email}`}
-            style={{ ...card, padding: "26px 24px", display: "block", textDecoration: "none",
-              height: "100%" }}>
-            <div style={{ width: 50, height: 50, borderRadius: 13, display: "grid",
-              placeItems: "center", background: `linear-gradient(135deg, ${PURPLE}, ${VIOLET})`,
-              marginBottom: 14 }}>
-              <Mail size={22} color="#fff" />
-            </div>
-            <h3 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700,
-              color: "var(--accent)" }}>Email us</h3>
-            <div style={{ fontSize: 15.5, fontWeight: 600, color: "var(--text)" }}>{c.email}</div>
-            {c.note && (
-              <p style={{ margin: "10px 0 0", fontSize: 13.5, color: "var(--text-muted)",
-                lineHeight: 1.6 }}>{c.note}</p>
-            )}
-          </a>
-        </Reveal>
-
-        {socials.map((l, n) => (
-          <Reveal key={l.id} delay={(n + 1) * 80} variant="rise" distance={26}>
-            <LinkCard link={l} bg={socialBg(l.kind)} />
-          </Reveal>
-        ))}
-      </div>
-    </Band>
-  );
-}
-
-const socialBg = (k) => ({
-  discord: "#5865F2",
-  instagram: "linear-gradient(135deg,#833AB4,#FD1D1D,#FCB045)",
-  facebook: "#1877F2",
-}[k] || PURPLE);
-
 /* ---------- BOARD MEMBERS ---------- */
 /* Compact revolving carousel, deliberately smaller in scale than the main
    gallery. Tabs switch between current and previous board. Clicking a card
@@ -4174,6 +4131,7 @@ function ProgramCard({ program: p }) {
 
 /* ---------- CONNECT ---------- */
 function ConnectSection({ data }) {
+  const c = data.contact || seed.contact;
   const bg = (k) => ({
     discord: "#5865F2", instagram: "linear-gradient(135deg,#833AB4,#FD1D1D,#FCB045)",
     facebook: "#1877F2", donate: `linear-gradient(135deg,${PURPLE},${GOLD})`, link: PURPLE,
@@ -4182,8 +4140,23 @@ function ConnectSection({ data }) {
     <Band id="connect" lattice decor="left" rosettes="wide" light lightTone="rose" lightAt="top-left">
       <SectionCopy data={data} sectionKey="connect" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 16 }}>
+        <Reveal variant="rise" distance={26}>
+          <a className="lift" href={`mailto:${c.email}`}
+            style={{ ...card, padding: "22px 24px", display: "flex", alignItems: "center", gap: 16,
+              textDecoration: "none", height: "100%" }}>
+            <div style={{ width: 50, height: 50, borderRadius: 13, display: "grid",
+              placeItems: "center", background: `linear-gradient(135deg, ${PURPLE}, ${VIOLET})`,
+              flexShrink: 0 }}>
+              <Mail size={22} color="#fff" />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 16 }}>Email us</div>
+              <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{c.email}</div>
+            </div>
+          </a>
+        </Reveal>
         {(data.links || []).map((l, n) => (
-          <Reveal key={l.id} delay={n * 65} variant="rise" distance={26}>
+          <Reveal key={l.id} delay={(n + 1) * 65} variant="rise" distance={26}>
             <LinkCard link={l} bg={bg(l.kind)} />
           </Reveal>
         ))}
@@ -4257,7 +4230,6 @@ function Footer({ onAdmin, data, onNav }) {
       { label: "Donate to MSA", href: donate.msaUrl },
       { label: "Support Islamic House", href: donate.houseUrl },
       { label: "Sponsors", id: "sponsors" },
-      { label: "Contact", id: "contact" },
     ]},
   ];
 
@@ -4652,7 +4624,6 @@ function Editor({ tab, data, setData }) {
       ["islamicHouse", "Islamic House"], ["gallery", "Photo gallery"],
       ["sponsors", "Sponsors"], ["board", "Board members"], ["prayer", "Prayer"],
       ["events", "Events"], ["programs", "Programs"], ["connect", "Connect"],
-      ["contact", "Contact"],
     ];
     const sections = data.sections || {};
     const setSection = (key, patch) => up({
