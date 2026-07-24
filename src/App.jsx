@@ -8,7 +8,6 @@ const QuadTree = React.lazy(() => import("./QuadTree.jsx"));
 // 3D cursor tilt on the medallion, magnetic CTAs. Self-contained — no
 // external files required beyond the animejs package itself.
 import { animate, createTimeline, stagger, utils } from "animejs";
-import ParticleLogo from "./components/ParticleLogo";
 import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
@@ -2026,41 +2025,169 @@ function Magnetic({ children, strength = 10, style }) {
   return <div ref={ref} style={{ display: "inline-block", willChange: "transform", ...style }}>{children}</div>;
 }
 
+// Shared crescent geometry — reused for the self-drawing outline, the
+// faint filled moon body, and the clip-path that keeps the skyline
+// confined inside the moon. Tilted like the crescent on the Pakistani
+// flag. If you change the tilt angle, update it in both spots below
+// (SVG clipPath transforms can't read CSS variables).
+const MOON_TILT_DEG = -25;
+const MOON_PATH_D = "M 130 20 A 100 100 0 1 0 130 240 A 88 100 0 1 1 130 20 Z";
+
+const WINDOW_LIGHTS = [
+  { cx: 39, cy: 180, c: "#FFE9A8", d: ".1s" }, { cx: 39, cy: 192, c: "#8FE3FF", d: ".6s" },
+  { cx: 55, cy: 162, c: "#FFE9A8", d: ".3s" }, { cx: 55, cy: 178, c: "#FF9AD5", d: "1.1s" },
+  { cx: 55, cy: 196, c: "#8FE3FF", d: ".8s" }, { cx: 71, cy: 188, c: "#FFE9A8", d: "1.4s" },
+  { cx: 71, cy: 202, c: "#FF9AD5", d: ".2s" }, { cx: 63, cy: 176, c: "#8FE3FF", d: ".9s" },
+  { cx: 63, cy: 192, c: "#FFE9A8", d: "1.6s" }, { cx: 63, cy: 204, c: "#FF9AD5", d: ".4s" },
+  { cx: 113, cy: 182, c: "#8FE3FF", d: ".7s" }, { cx: 113, cy: 198, c: "#FFE9A8", d: "1.2s" },
+  { cx: 131, cy: 160, c: "#FF9AD5", d: ".5s" }, { cx: 131, cy: 176, c: "#8FE3FF", d: "1.0s" },
+  { cx: 131, cy: 196, c: "#FFE9A8", d: "1.5s" },
+];
+
+/* Canvas ripple grid — small dark squares that ripple outward from the
+   cursor in alternating purple/gold rings. Scoped to the hero section
+   (not the whole page), and skipped entirely for reduced-motion. */
+function RippleGrid({ sectionRef, reduced }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (reduced) return;
+    const canvas = canvasRef.current;
+    const section = sectionRef.current;
+    if (!canvas || !section) return;
+    const ctx = canvas.getContext("2d");
+
+    const SPACING = 26, DOT_SIZE = 2, RIPPLE_RADIUS = 320;
+    const RING_SPACING = 34, RING_TRAIL = 3, WAVE_SPEED = 4;
+    const DOT_COLOR = "#222226";
+    const RING_COLORS = [PURPLE, GOLD];
+
+    let w, h, cols, rows, raf, clock = 0;
+    const mouse = { x: -9999, y: -9999, t: 0 };
+
+    const resize = () => {
+      const r = section.getBoundingClientRect();
+      w = canvas.width = r.width;
+      h = canvas.height = r.height;
+      cols = Math.ceil(w / SPACING);
+      rows = Math.ceil(h / SPACING);
+    };
+    resize();
+    const onResize = () => resize();
+    window.addEventListener("resize", onResize);
+
+    const onMove = (e) => {
+      const r = section.getBoundingClientRect();
+      mouse.x = e.clientX - r.left;
+      mouse.y = e.clientY - r.top;
+      mouse.t = clock;
+    };
+    section.addEventListener("mousemove", onMove);
+
+    const draw = () => {
+      clock += 1;
+      ctx.clearRect(0, 0, w, h);
+      const age = clock - mouse.t;
+      const wavefront = age * WAVE_SPEED;
+      const rippleAlive = age < 110 && wavefront < RIPPLE_RADIUS;
+
+      for (let cy = 0; cy <= rows; cy++) {
+        for (let cx = 0; cx <= cols; cx++) {
+          const x = cx * SPACING, y = cy * SPACING;
+          let size = DOT_SIZE, color = DOT_COLOR;
+          ctx.globalAlpha = 0.5;
+          if (rippleAlive) {
+            const dx = x - mouse.x, dy = y - mouse.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const behindFront = wavefront - dist;
+            if (behindFront >= 0 && behindFront < RING_SPACING * RING_TRAIL) {
+              const ringIndex = Math.floor(dist / RING_SPACING);
+              color = RING_COLORS[ringIndex % 2];
+              const bandFade = 1 - behindFront / (RING_SPACING * RING_TRAIL);
+              const overallFade = Math.max(0, 1 - age / 110);
+              const boost = bandFade * overallFade;
+              size = DOT_SIZE + boost * 3;
+              ctx.globalAlpha = Math.min(1, 0.3 + boost * 0.9);
+            }
+          }
+          ctx.fillStyle = color;
+          ctx.fillRect(x - size / 2, y - size / 2, size, size);
+          ctx.globalAlpha = 1;
+        }
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+      section.removeEventListener("mousemove", onMove);
+    };
+  }, [reduced, sectionRef]);
+
+  if (reduced) return null;
+  return (
+    <canvas ref={canvasRef} aria-hidden="true"
+      style={{ position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none" }} />
+  );
+}
+
 function HomeSection({ data, onNav, curtainDone }) {
   const reduced = useReducedMotion();
+  const sectionRef = useRef(null);
   const stageRef = useRef(null);
   const glowARef = useRef(null);
   const glowBRef = useRef(null);
+  const crescentPathRef = useRef(null);
   const titleWords = String(data.hero.title ?? seed.hero.title).split(" ");
 
-  // Bold, orchestrated entrance — fires once the curtain hands off (or
-  // immediately, statically, for reduced-motion visitors).
+  // Fluid-reveal entrance — crescent draws itself in, skyline rises inside
+  // it, wordmark letters stagger, then kicker/headline/subtitle/CTA. Fires
+  // once the curtain hands off (or immediately, statically, for
+  // reduced-motion visitors) — same gating as before.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
     if (reduced) {
-      utils.set(stage.querySelectorAll(".hero-logo,.hero-kicker,.hero-word,.hero-subtitle,.hero-cta"),
-        { opacity: 1, translateY: 0, filter: "blur(0px)" });
+      utils.set(stage.querySelectorAll(
+        ".hero-kicker,.wordmark .letter,.hero-word,.hero-subtitle,.hero-cta,.moon-fill-svg,.skyline-rise"
+      ), { opacity: 1, translateY: 0, filter: "blur(0px)" });
+      if (crescentPathRef.current) utils.set(crescentPathRef.current, { strokeDashoffset: 0 });
       return;
     }
     if (!curtainDone) return;
+
+    const path = crescentPathRef.current;
+    const len = path.getTotalLength();
+    utils.set(path, { strokeDasharray: len, strokeDashoffset: len });
+
     const tl = createTimeline({ defaults: { ease: "outExpo" } });
-    tl.add(stage.querySelector(".hero-logo"), {
-        opacity: [0, 1], scale: [0.8, 1], translateY: [34, 0], duration: 950,
+    tl.add(path, {
+        strokeDashoffset: [len, 0], duration: 950, ease: "inOutSine",
       }, 0)
+      .add(stage.querySelector(".moon-fill-svg"), {
+        opacity: [0, 1], duration: 950,
+      }, 0)
+      .add(stage.querySelector(".skyline-rise"), {
+        translateY: [40, 0], opacity: [0, 1], duration: 650, ease: "outQuad",
+      }, "-=450")
+      .add(stage.querySelectorAll(".wordmark .letter"), {
+        opacity: [0, 1], translateY: [16, 0], duration: 420, delay: stagger(35),
+      }, "-=250")
       .add(stage.querySelector(".hero-kicker"), {
-        opacity: [0, 1], translateY: [26, 0], duration: 750,
-      }, 260)
+        opacity: [0, 1], translateY: [22, 0], duration: 650,
+      }, "-=150")
       .add(stage.querySelectorAll(".hero-word"), {
-        opacity: [0, 1], translateY: [64, 0], filter: ["blur(12px)", "blur(0px)"],
-        duration: 900, delay: stagger(75),
-      }, 420)
+        opacity: [0, 1], translateY: [40, 0], filter: ["blur(8px)", "blur(0px)"],
+        duration: 700, delay: stagger(75),
+      }, "-=50")
       .add(stage.querySelector(".hero-subtitle"), {
-        opacity: [0, 1], translateY: [24, 0], duration: 800,
-      }, 1080)
+        opacity: [0, 1], translateY: [20, 0], duration: 600,
+      }, "-=150")
       .add(stage.querySelector(".hero-cta"), {
-        opacity: [0, 1], translateY: [24, 0], duration: 800,
-      }, 1260);
+        opacity: [0, 1], translateY: [24, 0], duration: 600, delay: stagger(90),
+      }, "-=200");
+
     return () => tl?.revert?.();
   }, [curtainDone, reduced]);
 
@@ -2079,12 +2206,13 @@ function HomeSection({ data, onNav, curtainDone }) {
 
   return (
     <>
-      <section id="home" className="grain vignette" style={{ position: "relative", overflow: "hidden",
+      <section id="home" ref={sectionRef} className="grain vignette" style={{ position: "relative", overflow: "hidden",
         background: GRAD_DEEP,   // stays as the base layer when no video is set
         color: "#fff", padding: "104px 20px 0" }}>
         <HeroVideo config={data.heroVideo} />
         <AmbientGlow />
         <PatternField />
+        <RippleGrid sectionRef={sectionRef} reduced={reduced} />
         {/* bold gold + violet light blooms — bigger and more saturated than
             a purely "subtle" ambient layer, still drifting almost imperceptibly */}
         <div aria-hidden="true" ref={glowARef} style={{ position: "absolute", top: "4%", left: "8%",
@@ -2093,32 +2221,79 @@ function HomeSection({ data, onNav, curtainDone }) {
         <div aria-hidden="true" ref={glowBRef} style={{ position: "absolute", bottom: "0%", right: "4%",
           width: 480, height: 480, borderRadius: "50%", filter: "blur(90px)", pointerEvents: "none", zIndex: 0,
           background: `radial-gradient(circle, rgba(140,120,180,.42) 0%, transparent 70%)` }} />
-        {/* large medallion — spins slowly on scroll, tilts in 3D toward the
-            cursor (anime.js), and reads noticeably bigger/bolder than before */}
-        <TiltWrap max={9} style={{ position: "absolute", top: "5%", left: "50%",
-          marginLeft: -280, pointerEvents: "none", zIndex: 0 }}>
-          <ScrollSpin speed={14}>
-            <Rosette points={16} skip={7} size={560} color={GOLD}
-              opacity={0.15} strokeWidth={1} />
-          </ScrollSpin>
-        </TiltWrap>
         <HangingLanterns />
-        {/* central mihrab arch silhouette — strokes draw themselves in */}
-        <HeroArch />
         <div ref={stageRef} style={{ maxWidth: 960, margin: "0 auto", position: "relative", zIndex: 2,
           textAlign: "center", paddingBottom: 90 }}>
-          <div className="hero-logo" style={{ opacity: 0, position: "relative",
-            height: 420, maxWidth: 640, margin: "0 auto" }}>
-            <ParticleLogo />
+
+          {/* ── Tilted crescent, self-draws in, skyline clipped inside it ── */}
+          <div style={{ position: "relative", width: 300, height: 300, margin: "0 auto 8px" }}>
+            <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+              <defs>
+                <clipPath id="moonClip" clipPathUnits="userSpaceOnUse">
+                  <path transform={`rotate(${MOON_TILT_DEG} 130 130)`} d={MOON_PATH_D} />
+                </clipPath>
+              </defs>
+            </svg>
+            <svg className="moon-fill-svg" viewBox="0 0 260 260" aria-hidden="true"
+              style={{ position: "absolute", inset: 0, opacity: 0,
+                transform: `rotate(${MOON_TILT_DEG}deg)`, transformOrigin: "50% 50%" }}>
+              <path fill="#F4F1F8" opacity="0.08" d={MOON_PATH_D} />
+            </svg>
+            <svg viewBox="0 0 260 260" aria-hidden="true"
+              style={{ position: "absolute", inset: 0,
+                transform: `rotate(${MOON_TILT_DEG}deg)`, transformOrigin: "50% 50%" }}>
+              <path ref={crescentPathRef} d={MOON_PATH_D} fill="none" stroke="#F4F1F8" strokeWidth="3"
+                strokeLinecap="round" style={{ filter: "drop-shadow(0 0 10px rgba(244,241,248,.35))" }} />
+            </svg>
+            <svg className="skyline-rise" viewBox="0 0 260 260" clipPath="url(#moonClip)" aria-hidden="true"
+              style={{ position: "absolute", inset: 0, opacity: 0 }}>
+              <defs>
+                <linearGradient id="skylineGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#E8A9D6" /><stop offset="100%" stopColor={PURPLE} />
+                </linearGradient>
+              </defs>
+              <g fill="url(#skylineGrad)">
+                <rect x="34" y="168" width="14" height="46"/><rect x="50" y="150" width="12" height="64"/>
+                <rect x="66" y="176" width="14" height="38"/>
+                <rect x="90" y="120" width="4" height="34"/>
+                <ellipse cx="92" cy="156" rx="13" ry="6"/>
+                <polygon points="84,162 100,162 92,214"/>
+                <rect x="58" y="164" width="14" height="50"/><rect x="108" y="170" width="15" height="44"/>
+                <rect x="126" y="148" width="13" height="66"/>
+              </g>
+              <g>
+                {WINDOW_LIGHTS.map((wl, i) => (
+                  <circle key={i} cx={wl.cx} cy={wl.cy} r={1.4} fill={wl.c}
+                    style={{ animation: "msaWindowFlicker 2.6s ease-in-out infinite", animationDelay: wl.d }} />
+                ))}
+              </g>
+            </svg>
           </div>
+
+          {/* ── Wordmark, letter-by-letter stagger ── */}
+          <div className="wordmark" style={{ display: "flex", alignItems: "baseline", gap: 10,
+            justifyContent: "center", flexWrap: "wrap", marginBottom: 18 }}>
+            {"MSA".split("").map((ch, i) => (
+              <span key={i} className="letter" style={{ display: "inline-block", opacity: 0,
+                fontSize: 44, fontWeight: 800, letterSpacing: 1,
+                backgroundImage: GRAD, WebkitBackgroundClip: "text", backgroundClip: "text",
+                WebkitTextFillColor: "transparent", color: "transparent" }}>{ch}</span>
+            ))}
+            {" AT UW".split("").map((ch, i) => (
+              <span key={`a${i}`} className="letter" style={{ display: "inline-block", opacity: 0,
+                fontSize: 22, fontWeight: 700, letterSpacing: 3, color: GOLD, alignSelf: "center" }}>
+                {ch === " " ? "\u00A0" : ch}
+              </span>
+            ))}
+          </div>
+
           <div className="hero-kicker" style={{ opacity: 0, display: "inline-flex", alignItems: "center", gap: 8,
             padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
             border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24 }}>
             <Star8 size={16} color={GOLD} /> <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".5px" }}>
               {data.hero.kicker ?? seed.hero.kicker}</span>
           </div>
-          {/* headline — noticeably larger, tighter tracking, masked word-by-word
-              reveal, and the final word carries the signature gradient */}
+
           <h1 style={{ fontSize: "clamp(40px,7.4vw,86px)", fontWeight: 800, lineHeight: 1.02,
             letterSpacing: "-2.6px", margin: "0 0 24px" }}>
             {titleWords.map((w, i) => {
@@ -2142,12 +2317,17 @@ function HomeSection({ data, onNav, curtainDone }) {
             {data.hero.mission}
           </p>
           <div className="hero-cta" style={{ opacity: 0, display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-            <Magnetic><button className="btn" onClick={() => onNav("connect")} style={btnGold}>Join MSA</button></Magnetic>
-            <Magnetic><button className="btn" onClick={() => onNav("events")} style={btnGhost}>See what's on</button></Magnetic>
-            <Magnetic><button className="btn donatepulse" onClick={() => onNav("donate")}
-              style={{ ...btnGhost, borderColor: "rgba(201,182,136,.65)", color: GOLD,
-                display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <Heart size={17} /> Donate
+            <Magnetic><button className="btn" onClick={() => onNav("connect")}
+              style={{ padding: "14px 30px", borderRadius: 12, fontWeight: 700, fontSize: 15.5,
+                border: "none", cursor: "pointer", color: "#fff",
+                background: `linear-gradient(120deg, ${PURPLE}, #E8A9D6)` }}>
+              Get Involved
+            </button></Magnetic>
+            <Magnetic><button className="btn" onClick={() => onNav("gallery")}
+              style={{ padding: "14px 30px", borderRadius: 12, fontWeight: 700, fontSize: 15.5,
+                background: "transparent", color: "#fff", cursor: "pointer",
+                border: "1px solid rgba(232,169,214,.5)" }}>
+              Learn More
             </button></Magnetic>
           </div>
         </div>
@@ -2156,6 +2336,11 @@ function HomeSection({ data, onNav, curtainDone }) {
         <div style={{ position: "relative" }}>
           <GirihBand color="rgba(183,165,122,.45)" height={54} opacity={1} unit={54} />
         </div>
+        <style>{`
+          @keyframes msaWindowFlicker {
+            0%, 100% { opacity: .35; } 45% { opacity: 1; } 52% { opacity: .5; } 60% { opacity: .95; }
+          }
+        `}</style>
       </section>
 
       {/* Gallery */}
