@@ -4,10 +4,10 @@ import { supabase, loadContent, saveContent, uploadImage, deleteImage, pathFromU
 // Lazy — keeps anime.js out of the initial bundle. It only downloads when
 // a visitor actually scrolls near the Quad section.
 const QuadTree = React.lazy(() => import("./QuadTree.jsx"));
-// Anime.js-powered hero motion: floating gold light + subtle cursor
-// parallax on the hero medallion, and the self-drawing geometric divider.
-import { floatingGlow, mouseParallax } from "./hero/lib/animations.js";
-const GeometricDivider = React.lazy(() => import("./hero/components/GeometricDivider.jsx"));
+// Bold anime.js-driven hero: curtain intro, orchestrated headline reveal,
+// 3D cursor tilt on the medallion, magnetic CTAs. Self-contained — no
+// external files required beyond the animejs package itself.
+import { animate, createTimeline, stagger, utils } from "animejs";
 import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
@@ -1090,6 +1090,8 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Curtain-up moment before the hero animates in — see HeroCurtain below.
+  const [curtainDone, setCurtainDone] = useState(false);
 
   // Theme — remembers the visitor's choice, otherwise follows their OS setting.
   const [dark, setDark] = useState(() => {
@@ -1184,6 +1186,7 @@ export default function App() {
       style={{ fontFamily: "'Poppins', system-ui, sans-serif",
         color: "var(--text)", background: "var(--bg)", minHeight: "100vh" }}>
       <StyleTag />
+      <HeroCurtain onDone={() => setCurtainDone(true)} />
       {petals && <SakuraWind dark={dark} />}
       <AnnouncementBar bar={data.bar} onNav={scrollTo} />
       <Nav active={active} onNav={scrollTo} menuOpen={menuOpen} setMenuOpen={setMenuOpen}
@@ -1194,12 +1197,11 @@ export default function App() {
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)}
         data={data} onNav={scrollTo} />
       <main>
-        <HomeSection data={data} onNav={scrollTo} />
+        <HomeSection data={data} onNav={scrollTo} curtainDone={curtainDone} />
         <AnnouncementsSection data={data} />
         <DonateSection data={data} />
         <AboutSection data={data} />
         <QuadSection data={data} />
-        <React.Suspense fallback={null}><GeometricDivider color={GOLD} /></React.Suspense>
         <PrayerSection data={data} />
         <IslamicHouseSection data={data} />
         <SponsorsSection data={data} />
@@ -1894,80 +1896,252 @@ function Lead({ children, delay = 260, style }) {
 }
 
 /* ---------- HOME ---------- */
-function HomeSection({ data, onNav }) {
-  const heroRef = useRef(null);      // el that listens for cursor movement
-  const rosetteRef = useRef(null);   // moves ≤16px toward the cursor
-  const glowARef = useRef(null);     // two soft gold lights drifting behind
-  const glowBRef = useRef(null);     // the hero content — anime.js loops
+/* ── HeroCurtain ─────────────────────────────────────────────────────────
+   The opening moment: a large gold 8-point star draws itself in with
+   anime.js, holds for a beat with a soft glow pulse, then the whole
+   curtain sweeps up and out of view. Fires onDone once, so the hero
+   underneath knows exactly when to start its own reveal. Skips straight
+   to onDone for reduced-motion users so nothing blocks the page. */
+function HeroCurtain({ onDone }) {
+  const reduced = useReducedMotion();
+  const [visible, setVisible] = useState(!reduced);
+  const rootRef = useRef(null);
+  const strokeRef = useRef(null);
+  const fillRef = useRef(null);
 
   useEffect(() => {
-    const a = floatingGlow(glowARef.current, { x: 44, y: 28, duration: 15000 });
-    const b = floatingGlow(glowBRef.current, { x: -34, y: 22, duration: 18000, delay: 1500 });
-    const cleanupParallax = mouseParallax(heroRef.current, { target: rosetteRef.current, range: 16 });
-    return () => { a?.revert?.(); b?.revert?.(); cleanupParallax(); };
-  }, []);
+    if (reduced) { onDone?.(); return; }
+    const path = strokeRef.current;
+    const len = path.getTotalLength();
+    utils.set(path, { strokeDasharray: len, strokeDashoffset: len });
+
+    const tl = createTimeline({
+      onComplete: () => {
+        setVisible(false);
+        onDone?.();
+      },
+    });
+    tl.add(path, { strokeDashoffset: [len, 0], duration: 1350, ease: "inOutSine" })
+      .add(fillRef.current, { opacity: [0, 0.9], duration: 500, ease: "outQuad" }, "-=200")
+      .add(rootRef.current, { opacity: 0, scale: 1.08, duration: 700, ease: "inExpo" }, "+=300");
+
+    return () => tl?.revert?.();
+  }, [reduced, onDone]);
+
+  if (!visible) return null;
+
+  return (
+    <div ref={rootRef} aria-hidden="true" style={{
+      position: "fixed", inset: 0, zIndex: 999, display: "grid", placeItems: "center",
+      background: INK, pointerEvents: "none",
+    }}>
+      <svg viewBox="0 0 200 200" width="130" height="130">
+        <defs>
+          <filter id="curtain-glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="5" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+        <path ref={fillRef} d={STAR8_PATH} fill={GOLD} opacity="0" filter="url(#curtain-glow)" />
+        <path ref={strokeRef} d={STAR8_PATH} fill="none" stroke={GOLD} strokeWidth="1.6"
+          strokeLinejoin="round" filter="url(#curtain-glow)" />
+      </svg>
+    </div>
+  );
+}
+const STAR8_PATH = (() => {
+  let d = "";
+  for (let i = 0; i < 16; i++) {
+    const r = i % 2 === 0 ? 74 : 32;
+    const a = (Math.PI / 8) * i - Math.PI / 2;
+    const x = 100 + r * Math.cos(a), y = 100 + r * Math.sin(a);
+    d += (i === 0 ? "M" : "L") + x.toFixed(2) + "," + y.toFixed(2) + " ";
+  }
+  return d + "Z";
+})();
+
+/* ── 3D cursor tilt ──────────────────────────────────────────────────────
+   Wraps a child in a perspective container that tilts toward the cursor
+   (±8°) — the "premium, modern" depth cue used across Linear/Vercel/Stripe.
+   Smoothed with anime.js rather than snapping straight to the pointer. */
+function TiltWrap({ children, max = 8, style }) {
+  const outerRef = useRef(null);
+  const innerRef = useRef(null);
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    if (reduced) return;
+    const el = outerRef.current, inner = innerRef.current;
+    if (!el || !inner) return;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width - 0.5;
+      const py = (e.clientY - r.top) / r.height - 0.5;
+      animate(inner, {
+        rotateY: px * max * 2, rotateX: -py * max * 2,
+        duration: 700, ease: "outQuad",
+      });
+    };
+    const onLeave = () => animate(inner, { rotateX: 0, rotateY: 0, duration: 900, ease: "outQuad" });
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerleave", onLeave);
+    return () => { el.removeEventListener("pointermove", onMove); el.removeEventListener("pointerleave", onLeave); };
+  }, [reduced, max]);
+
+  return (
+    <div ref={outerRef} style={{ perspective: 900, ...style }}>
+      <div ref={innerRef} style={{ transformStyle: "preserve-3d" }}>{children}</div>
+    </div>
+  );
+}
+
+/* ── Magnetic button ─────────────────────────────────────────────────────
+   Nudges toward the cursor within its own bounds (up to ~10px) and pops
+   slightly on hover — a small, deliberate bit of "this was crafted" feel
+   for the hero CTAs. Falls back to plain hover for reduced motion. */
+function Magnetic({ children, strength = 10, style }) {
+  const ref = useRef(null);
+  const reduced = useReducedMotion();
+  useEffect(() => {
+    if (reduced) return;
+    const el = ref.current;
+    if (!el) return;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5;
+      const y = (e.clientY - r.top) / r.height - 0.5;
+      animate(el, { translateX: x * strength * 2, translateY: y * strength * 2, scale: 1.035,
+        duration: 400, ease: "outQuad" });
+    };
+    const onLeave = () => animate(el, { translateX: 0, translateY: 0, scale: 1, duration: 500, ease: "outElastic(1,.6)" });
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerleave", onLeave);
+    return () => { el.removeEventListener("pointermove", onMove); el.removeEventListener("pointerleave", onLeave); };
+  }, [reduced, strength]);
+  return <div ref={ref} style={{ display: "inline-block", willChange: "transform", ...style }}>{children}</div>;
+}
+
+function HomeSection({ data, onNav, curtainDone }) {
+  const reduced = useReducedMotion();
+  const stageRef = useRef(null);
+  const glowARef = useRef(null);
+  const glowBRef = useRef(null);
+  const titleWords = String(data.hero.title ?? seed.hero.title).split(" ");
+
+  // Bold, orchestrated entrance — fires once the curtain hands off (or
+  // immediately, statically, for reduced-motion visitors).
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (reduced) {
+      utils.set(stage.querySelectorAll(".hero-logo,.hero-kicker,.hero-word,.hero-subtitle,.hero-cta"),
+        { opacity: 1, translateY: 0, filter: "blur(0px)" });
+      return;
+    }
+    if (!curtainDone) return;
+    const tl = createTimeline({ defaults: { ease: "outExpo" } });
+    tl.add(stage.querySelector(".hero-logo"), {
+        opacity: [0, 1], scale: [0.8, 1], translateY: [34, 0], duration: 950,
+      }, 0)
+      .add(stage.querySelector(".hero-kicker"), {
+        opacity: [0, 1], translateY: [26, 0], duration: 750,
+      }, 260)
+      .add(stage.querySelectorAll(".hero-word"), {
+        opacity: [0, 1], translateY: [64, 0], filter: ["blur(12px)", "blur(0px)"],
+        duration: 900, delay: stagger(75),
+      }, 420)
+      .add(stage.querySelector(".hero-subtitle"), {
+        opacity: [0, 1], translateY: [24, 0], duration: 800,
+      }, 1080)
+      .add(stage.querySelector(".hero-cta"), {
+        opacity: [0, 1], translateY: [24, 0], duration: 800,
+      }, 1260);
+    return () => tl?.revert?.();
+  }, [curtainDone, reduced]);
+
+  // Bold ambient light — bigger, more saturated blooms drifting behind the
+  // hero, still slow, still nothing that snaps.
+  useEffect(() => {
+    if (reduced) return;
+    const a = animate(glowARef.current, {
+      translateX: [0, 56, 0], translateY: [0, 36, 0], duration: 13000, loop: true, ease: "inOutSine",
+    });
+    const b = animate(glowBRef.current, {
+      translateX: [0, -46, 0], translateY: [0, 28, 0], duration: 16000, loop: true, ease: "inOutSine", delay: 1200,
+    });
+    return () => { a?.revert?.(); b?.revert?.(); };
+  }, [reduced]);
 
   return (
     <>
-      <section id="home" ref={heroRef} className="grain vignette" style={{ position: "relative", overflow: "hidden",
+      <section id="home" className="grain vignette" style={{ position: "relative", overflow: "hidden",
         background: GRAD_DEEP,   // stays as the base layer when no video is set
         color: "#fff", padding: "104px 20px 0" }}>
         <HeroVideo config={data.heroVideo} />
         <AmbientGlow />
         <PatternField />
-        {/* soft gold light, drifting almost imperceptibly (anime.js loop) */}
-        <div aria-hidden="true" ref={glowARef} style={{ position: "absolute", top: "10%", left: "16%",
-          width: 380, height: 380, borderRadius: "50%", filter: "blur(90px)", pointerEvents: "none", zIndex: 0,
-          background: `radial-gradient(circle, rgba(201,182,136,.22) 0%, transparent 70%)` }} />
-        <div aria-hidden="true" ref={glowBRef} style={{ position: "absolute", bottom: "6%", right: "12%",
-          width: 320, height: 320, borderRadius: "50%", filter: "blur(80px)", pointerEvents: "none", zIndex: 0,
-          background: `radial-gradient(circle, rgba(91,61,140,.28) 0%, transparent 70%)` }} />
-        {/* large medallion behind the hero content, turning with scroll and
-            nudged (≤16px) toward the cursor via anime.js */}
-        <div aria-hidden="true" ref={rosetteRef} style={{ position: "absolute", top: "8%", left: "50%",
-          marginLeft: -260, pointerEvents: "none", zIndex: 0 }}>
+        {/* bold gold + violet light blooms — bigger and more saturated than
+            a purely "subtle" ambient layer, still drifting almost imperceptibly */}
+        <div aria-hidden="true" ref={glowARef} style={{ position: "absolute", top: "4%", left: "8%",
+          width: 540, height: 540, borderRadius: "50%", filter: "blur(100px)", pointerEvents: "none", zIndex: 0,
+          background: `radial-gradient(circle, rgba(201,182,136,.4) 0%, transparent 70%)` }} />
+        <div aria-hidden="true" ref={glowBRef} style={{ position: "absolute", bottom: "0%", right: "4%",
+          width: 480, height: 480, borderRadius: "50%", filter: "blur(90px)", pointerEvents: "none", zIndex: 0,
+          background: `radial-gradient(circle, rgba(140,120,180,.42) 0%, transparent 70%)` }} />
+        {/* large medallion — spins slowly on scroll, tilts in 3D toward the
+            cursor (anime.js), and reads noticeably bigger/bolder than before */}
+        <TiltWrap max={9} style={{ position: "absolute", top: "5%", left: "50%",
+          marginLeft: -280, pointerEvents: "none", zIndex: 0 }}>
           <ScrollSpin speed={14}>
-            <Rosette points={16} skip={7} size={520} color={GOLD}
-              opacity={0.11} strokeWidth={1} />
+            <Rosette points={16} skip={7} size={560} color={GOLD}
+              opacity={0.15} strokeWidth={1} />
           </ScrollSpin>
-        </div>
+        </TiltWrap>
         <HangingLanterns />
         {/* central mihrab arch silhouette — strokes draw themselves in */}
         <HeroArch />
-        <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2,
+        <div ref={stageRef} style={{ maxWidth: 960, margin: "0 auto", position: "relative", zIndex: 2,
           textAlign: "center", paddingBottom: 90 }}>
-          <HeroIntro delay={120} variant="scale">
-            <AnimatedLogo />
-          </HeroIntro>
-          <HeroIntro delay={300} variant="scale">
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8,
-              padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
-              border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24 }}>
-              <Star8 size={16} color={GOLD} /> <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".5px" }}>
-                {data.hero.kicker ?? seed.hero.kicker}</span>
-            </div>
-          </HeroIntro>
-          <h1 style={{ fontSize: "clamp(32px,5.5vw,58px)", fontWeight: 800, lineHeight: 1.08,
-            letterSpacing: "-1.5px", margin: "0 0 22px" }}>
-            <HeroWords text={data.hero.title} delay={430} step={62} />
+          <div className="hero-logo" style={{ opacity: 0 }}><AnimatedLogo /></div>
+          <div className="hero-kicker" style={{ opacity: 0, display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
+            border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24 }}>
+            <Star8 size={16} color={GOLD} /> <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".5px" }}>
+              {data.hero.kicker ?? seed.hero.kicker}</span>
+          </div>
+          {/* headline — noticeably larger, tighter tracking, masked word-by-word
+              reveal, and the final word carries the signature gradient */}
+          <h1 style={{ fontSize: "clamp(40px,7.4vw,86px)", fontWeight: 800, lineHeight: 1.02,
+            letterSpacing: "-2.6px", margin: "0 0 24px" }}>
+            {titleWords.map((w, i) => {
+              const last = i === titleWords.length - 1;
+              return (
+                <span key={i} style={{ display: "inline-block", overflow: "hidden", verticalAlign: "top" }}>
+                  <span className="hero-word" style={{
+                    display: "inline-block", opacity: 0,
+                    ...(last ? {
+                      backgroundImage: GRAD, WebkitBackgroundClip: "text", backgroundClip: "text",
+                      WebkitTextFillColor: "transparent", color: "transparent",
+                    } : {}),
+                  }}>{w}</span>
+                  {!last && <span>&nbsp;</span>}
+                </span>
+              );
+            })}
           </h1>
-          <HeroIntro delay={900}>
-            <p style={{ fontSize: "clamp(16px,2vw,20px)", color: "rgba(255,255,255,.85)",
-              maxWidth: 640, margin: "0 auto 36px", lineHeight: 1.6 }}>
-              {data.hero.mission}
-            </p>
-          </HeroIntro>
-          <HeroIntro delay={1060}>
-            <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-              <button className="btn" onClick={() => onNav("connect")} style={btnGold}>Join MSA</button>
-              <button className="btn" onClick={() => onNav("events")} style={btnGhost}>See what's on</button>
-              <button className="btn donatepulse" onClick={() => onNav("donate")}
-                style={{ ...btnGhost, borderColor: "rgba(201,182,136,.65)", color: GOLD,
-                  display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <Heart size={17} /> Donate
-              </button>
-            </div>
-          </HeroIntro>
+          <p className="hero-subtitle" style={{ opacity: 0, fontSize: "clamp(17px,2.2vw,22px)",
+            color: "rgba(255,255,255,.85)", maxWidth: 660, margin: "0 auto 40px", lineHeight: 1.6 }}>
+            {data.hero.mission}
+          </p>
+          <div className="hero-cta" style={{ opacity: 0, display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
+            <Magnetic><button className="btn" onClick={() => onNav("connect")} style={btnGold}>Join MSA</button></Magnetic>
+            <Magnetic><button className="btn" onClick={() => onNav("events")} style={btnGhost}>See what's on</button></Magnetic>
+            <Magnetic><button className="btn donatepulse" onClick={() => onNav("donate")}
+              style={{ ...btnGhost, borderColor: "rgba(201,182,136,.65)", color: GOLD,
+                display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <Heart size={17} /> Donate
+            </button></Magnetic>
+          </div>
         </div>
         <ScrollCue onClick={() => onNav("gallery")} />
         {/* girih band along the base of the hero */}
