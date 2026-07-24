@@ -211,12 +211,21 @@ function CherryBlossoms({ count = 16 }) {
   useEffect(() => { setOn(!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }, []);
   const petals = React.useMemo(() => {
     const colors = [PINK, MAUVE, "#e8c4d4", GOLD];
-    return Array.from({ length: count }, (_, i) => ({
-      id: i, left: (i * 97) % 100, size: 10 + ((i * 7) % 12),
-      duration: 9 + ((i * 3) % 8), delay: -((i * 13) % 16),
-      drift: (i % 2 === 0 ? 1 : -1) * (20 + (i * 11) % 50),
-      color: colors[i % colors.length], spin: (i % 2 === 0 ? 1 : -1) * (180 + (i * 37) % 360),
-    }));
+    return Array.from({ length: count }, (_, i) => {
+      // even spread across the width, plus a deterministic jitter
+      const band = (i / count) * 100;
+      const jitter = ((i * 37) % 11) - 5;          // -5..+5
+      return {
+        id: i,
+        left: Math.max(0, Math.min(96, band + jitter)),
+        size: 10 + ((i * 7) % 12),
+        duration: 9 + ((i * 5) % 9),
+        delay: -((i * 7) % 18),                     // staggered start times
+        drift: (i % 2 === 0 ? 1 : -1) * (20 + (i * 11) % 50),
+        color: colors[i % colors.length],
+        spin: (i % 2 === 0 ? 1 : -1) * (180 + (i * 37) % 360),
+      };
+    });
   }, [count]);
   if (!on) return null;
   return (
