@@ -8,7 +8,6 @@ const QuadTree = React.lazy(() => import("./QuadTree.jsx"));
 // 3D cursor tilt on the medallion, magnetic CTAs. Self-contained — no
 // external files required beyond the animejs package itself.
 import { animate, createTimeline, stagger, utils } from "animejs";
-import ParticleLogo from "./components/ParticleLogo";
 import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
@@ -599,6 +598,9 @@ function SakuraWind({ dark }) {
 
     let raf;
     const draw = () => {
+      // Skip the per-frame work (but keep the loop alive) while the tab is
+      // backgrounded — no point animating petals nobody can see.
+      if (document.hidden) { raf = requestAnimationFrame(draw); return; }
       ctx.clearRect(0, 0, w, h);
       gust *= 0.945;   // decay back to a calm breeze
       gustV *= 0.92;
@@ -641,39 +643,68 @@ function Parallax({ speed = 0.15, children, style, float = false, ...rest }) {
   const target = useRef(0);
   const current = useRef(0);
   const raf = useRef(0);
+  const inView = useRef(false);
 
+  // Perf note: this used to run an independent requestAnimationFrame loop
+  // forever, for the lifetime of the page, for every single Parallax
+  // instance (~20 of them across the site) — a major source of mobile
+  // jank, since it kept ~20 rAF callbacks + scroll/resize listeners alive
+  // even for sections nowhere near the viewport. Now the loop only runs
+  // while the element is near the viewport (IntersectionObserver) and
+  // stops itself once it has settled at its target, restarting on the
+  // next scroll/resize.
   useEffect(() => {
     if (reduced) return;
     const el = ref.current;
     if (!el) return;
 
-    // Read scroll position into a target, then ease toward it every frame.
-    // The interpolation is what removes the "stepping" feel of raw scroll
-    // parallax and gives it the smooth, weighted quality of a good agency site.
     const measure = () => {
       const r = el.getBoundingClientRect();
       const vh = window.innerHeight || 1;
       const progress = (r.top + r.height / 2 - vh / 2) / vh;
       target.current = progress * speed * 100;
+      startLoop();
+    };
+
+    const startLoop = () => {
+      if (raf.current || !inView.current || document.hidden) return;
+      raf.current = requestAnimationFrame(tick);
     };
 
     const tick = () => {
       current.current += (target.current - current.current) * 0.085; // lerp
       if (el) el.style.transform = `translate3d(0, ${current.current.toFixed(2)}px, 0)`;
+      const settled = Math.abs(target.current - current.current) < 0.05;
+      if (settled || !inView.current || document.hidden) {
+        raf.current = 0; // stop — nothing meaningful left to animate right now
+        return;
+      }
       raf.current = requestAnimationFrame(tick);
     };
+
+    const io = new IntersectionObserver(([entry]) => {
+      inView.current = entry.isIntersecting;
+      if (inView.current) { measure(); startLoop(); }
+      else { cancelAnimationFrame(raf.current); raf.current = 0; }
+    }, { rootMargin: "200px 0px" });
+    io.observe(el);
+
+    const onVisibility = () => { if (!document.hidden) startLoop(); };
 
     measure();
     current.current = target.current;
     el.style.transform = `translate3d(0, ${current.current.toFixed(2)}px, 0)`;
-    raf.current = requestAnimationFrame(tick);
 
     window.addEventListener("scroll", measure, { passive: true });
     window.addEventListener("resize", measure, { passive: true });
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelAnimationFrame(raf.current);
+      raf.current = 0;
+      io.disconnect();
       window.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [speed, reduced]);
 
@@ -1083,6 +1114,7 @@ function mergeContent(base, saved) {
 }
 
 export default function App() {
+  const reducedMotion = useReducedMotion();
   const [data, setData] = useState(seed);
   const [menuOpen, setMenuOpen] = useState(false);
   const [active, setActive] = useState("home");
@@ -1186,6 +1218,7 @@ export default function App() {
       style={{ fontFamily: "'Poppins', system-ui, sans-serif",
         color: "var(--text)", background: "var(--bg)", minHeight: "100vh" }}>
       <StyleTag />
+      <RippleField reduced={reducedMotion} />
       <HeroCurtain onDone={() => setCurtainDone(true)} />
       {petals && <SakuraWind dark={dark} />}
       <AnnouncementBar bar={data.bar} onNav={scrollTo} />
@@ -2026,41 +2059,171 @@ function Magnetic({ children, strength = 10, style }) {
   return <div ref={ref} style={{ display: "inline-block", willChange: "transform", ...style }}>{children}</div>;
 }
 
+/* Canvas ripple grid — small dark squares that ripple outward from the
+   cursor in alternating purple/gold rings. Scoped to the hero section
+   (not the whole page), and skipped entirely for reduced-motion. */
+/* ── RippleField ──────────────────────────────────────────────────────────
+   Site-wide "outward" hover/tap effect: a sparse dot grid that ripples out
+   from wherever you move the cursor (or tap, on touch devices) in
+   alternating purple/gold rings. Mounted once at the app root as a single
+   fixed, viewport-sized overlay — not per-section — so there's exactly one
+   canvas and one animation loop for the whole page.
+
+   Perf-critical difference from the old per-section version: the redraw
+   loop used to run requestAnimationFrame forever, clearing and redrawing
+   every dot every frame, for the entire life of the page. Here the canvas
+   is only cleared/redrawn while a ripple is actually decaying (roughly the
+   ~1.8s after a pointer moves or taps); the rest of the time the loop is
+   stopped entirely and the last-drawn frame (or nothing) just sits there.
+   That's the difference between one rAF callback that's *usually idle* and
+   one that's *always working* — the latter is what was contributing to the
+   mobile jank. */
+function RippleField({ reduced }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (reduced) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    const isSmall = () => window.innerWidth < 640;
+    const RING_COLORS = [PURPLE, GOLD];
+    const RIPPLE_LIFE = 110; // frames
+    const WAVE_SPEED = 4;
+    const RING_SPACING = 34, RING_TRAIL = 3;
+
+    let SPACING = isSmall() ? 34 : 26;
+    const DOT_SIZE = 2, RIPPLE_RADIUS = 320;
+
+    let w = 0, h = 0, cols = 0, rows = 0;
+    let raf = 0, clock = 0, running = false;
+    const pointer = { x: -9999, y: -9999, t: -9999 };
+
+    const resize = () => {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+      SPACING = isSmall() ? 34 : 26;
+      cols = Math.ceil(w / SPACING);
+      rows = Math.ceil(h / SPACING);
+    };
+    resize();
+
+    const clear = () => ctx.clearRect(0, 0, w, h);
+
+    // Only the "active ripple" window ever redraws the full grid; once it
+    // decays the loop stops itself and the canvas goes back to blank/idle.
+    const draw = () => {
+      clock += 1;
+      const age = clock - pointer.t;
+      const wavefront = age * WAVE_SPEED;
+      const alive = age < RIPPLE_LIFE && wavefront < RIPPLE_RADIUS && !document.hidden;
+
+      if (!alive) { clear(); running = false; return; } // stop the loop
+
+      clear();
+      for (let cy = 0; cy <= rows; cy++) {
+        for (let cx = 0; cx <= cols; cx++) {
+          const x = cx * SPACING, y = cy * SPACING;
+          const dx = x - pointer.x, dy = y - pointer.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const behindFront = wavefront - dist;
+          if (behindFront < 0 || behindFront >= RING_SPACING * RING_TRAIL) continue; // skip undisturbed dots entirely
+          const ringIndex = Math.floor(dist / RING_SPACING);
+          const bandFade = 1 - behindFront / (RING_SPACING * RING_TRAIL);
+          const overallFade = Math.max(0, 1 - age / RIPPLE_LIFE);
+          const boost = bandFade * overallFade;
+          const size = DOT_SIZE + boost * 3;
+          ctx.globalAlpha = Math.min(1, 0.3 + boost * 0.9);
+          ctx.fillStyle = RING_COLORS[ringIndex % 2];
+          ctx.fillRect(x - size / 2, y - size / 2, size, size);
+        }
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    };
+
+    const startRipple = (x, y) => {
+      pointer.x = x; pointer.y = y; pointer.t = clock;
+      if (!running) { running = true; raf = requestAnimationFrame(draw); }
+    };
+
+    const onPointerMove = (e) => startRipple(e.clientX, e.clientY);
+    const onTouch = (e) => {
+      const t = e.touches?.[0];
+      if (t) startRipple(t.clientX, t.clientY);
+    };
+    const onResize = () => resize();
+    const onVisibility = () => { if (document.hidden) { cancelAnimationFrame(raf); running = false; clear(); } };
+
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointerdown", onPointerMove, { passive: true });
+    window.addEventListener("touchstart", onTouch, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerdown", onPointerMove);
+      window.removeEventListener("touchstart", onTouch);
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [reduced]);
+
+  if (reduced) return null;
+  return (
+    <canvas ref={canvasRef} aria-hidden="true"
+      style={{ position: "fixed", inset: 0, width: "100vw", height: "100vh",
+        zIndex: 9998, pointerEvents: "none" }} />
+  );
+}
+
 function HomeSection({ data, onNav, curtainDone }) {
   const reduced = useReducedMotion();
+  const sectionRef = useRef(null);
   const stageRef = useRef(null);
   const glowARef = useRef(null);
   const glowBRef = useRef(null);
   const titleWords = String(data.hero.title ?? seed.hero.title).split(" ");
 
-  // Bold, orchestrated entrance — fires once the curtain hands off (or
-  // immediately, statically, for reduced-motion visitors).
+  // Fluid-reveal entrance — logo mark scales/fades in, wordmark letters
+  // stagger, then kicker/headline/subtitle/CTA. Fires once the curtain
+  // hands off (or immediately, statically, for reduced-motion visitors) —
+  // same gating as before.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
     if (reduced) {
-      utils.set(stage.querySelectorAll(".hero-logo,.hero-kicker,.hero-word,.hero-subtitle,.hero-cta"),
-        { opacity: 1, translateY: 0, filter: "blur(0px)" });
+      utils.set(stage.querySelectorAll(
+        ".hero-kicker,.wordmark .letter,.hero-word,.hero-subtitle,.hero-cta,.hero-logo-mark"
+      ), { opacity: 1, translateY: 0, scale: 1, filter: "blur(0px)" });
       return;
     }
     if (!curtainDone) return;
+
     const tl = createTimeline({ defaults: { ease: "outExpo" } });
-    tl.add(stage.querySelector(".hero-logo"), {
-        opacity: [0, 1], scale: [0.8, 1], translateY: [34, 0], duration: 950,
+    tl.add(stage.querySelector(".hero-logo-mark"), {
+        opacity: [0, 1], scale: [0.85, 1], duration: 950, ease: "outExpo",
       }, 0)
+      .add(stage.querySelectorAll(".wordmark .letter"), {
+        opacity: [0, 1], translateY: [16, 0], duration: 420, delay: stagger(35),
+      }, "-=250")
       .add(stage.querySelector(".hero-kicker"), {
-        opacity: [0, 1], translateY: [26, 0], duration: 750,
-      }, 260)
+        opacity: [0, 1], translateY: [22, 0], duration: 650,
+      }, "-=150")
       .add(stage.querySelectorAll(".hero-word"), {
-        opacity: [0, 1], translateY: [64, 0], filter: ["blur(12px)", "blur(0px)"],
-        duration: 900, delay: stagger(75),
-      }, 420)
+        opacity: [0, 1], translateY: [40, 0], filter: ["blur(8px)", "blur(0px)"],
+        duration: 700, delay: stagger(75),
+      }, "-=50")
       .add(stage.querySelector(".hero-subtitle"), {
-        opacity: [0, 1], translateY: [24, 0], duration: 800,
-      }, 1080)
+        opacity: [0, 1], translateY: [20, 0], duration: 600,
+      }, "-=150")
       .add(stage.querySelector(".hero-cta"), {
-        opacity: [0, 1], translateY: [24, 0], duration: 800,
-      }, 1260);
+        opacity: [0, 1], translateY: [24, 0], duration: 600, delay: stagger(90),
+      }, "-=200");
+
     return () => tl?.revert?.();
   }, [curtainDone, reduced]);
 
@@ -2079,7 +2242,7 @@ function HomeSection({ data, onNav, curtainDone }) {
 
   return (
     <>
-      <section id="home" className="grain vignette" style={{ position: "relative", overflow: "hidden",
+      <section id="home" ref={sectionRef} className="grain vignette" style={{ position: "relative", overflow: "hidden",
         background: GRAD_DEEP,   // stays as the base layer when no video is set
         color: "#fff", padding: "104px 20px 0" }}>
         <HeroVideo config={data.heroVideo} />
@@ -2093,32 +2256,43 @@ function HomeSection({ data, onNav, curtainDone }) {
         <div aria-hidden="true" ref={glowBRef} style={{ position: "absolute", bottom: "0%", right: "4%",
           width: 480, height: 480, borderRadius: "50%", filter: "blur(90px)", pointerEvents: "none", zIndex: 0,
           background: `radial-gradient(circle, rgba(140,120,180,.42) 0%, transparent 70%)` }} />
-        {/* large medallion — spins slowly on scroll, tilts in 3D toward the
-            cursor (anime.js), and reads noticeably bigger/bolder than before */}
-        <TiltWrap max={9} style={{ position: "absolute", top: "5%", left: "50%",
-          marginLeft: -280, pointerEvents: "none", zIndex: 0 }}>
-          <ScrollSpin speed={14}>
-            <Rosette points={16} skip={7} size={560} color={GOLD}
-              opacity={0.15} strokeWidth={1} />
-          </ScrollSpin>
-        </TiltWrap>
         <HangingLanterns />
-        {/* central mihrab arch silhouette — strokes draw themselves in */}
-        <HeroArch />
         <div ref={stageRef} style={{ maxWidth: 960, margin: "0 auto", position: "relative", zIndex: 2,
           textAlign: "center", paddingBottom: 90 }}>
-          <div className="hero-logo" style={{ opacity: 0, position: "relative",
-            height: 420, maxWidth: 640, margin: "0 auto" }}>
-            <ParticleLogo />
+
+          {/* ── Logo mark, fades/scales in ── */}
+          <div className="hero-logo-mark" style={{ position: "relative", width: 220, height: 220,
+            margin: "0 auto 8px", opacity: 0 }}>
+            <img src={`${import.meta.env.BASE_URL}logo-mark.png`} alt="MSA at UW logo"
+              width={220} height={220} decoding="async"
+              style={{ width: "100%", height: "100%", objectFit: "contain",
+                filter: "drop-shadow(0 8px 26px rgba(0,0,0,.35))" }} />
           </div>
+
+          {/* ── Wordmark, letter-by-letter stagger ── */}
+          <div className="wordmark" style={{ display: "flex", alignItems: "baseline", gap: 10,
+            justifyContent: "center", flexWrap: "wrap", marginBottom: 18 }}>
+            {"MSA".split("").map((ch, i) => (
+              <span key={i} className="letter" style={{ display: "inline-block", opacity: 0,
+                fontSize: 44, fontWeight: 800, letterSpacing: 1,
+                backgroundImage: GRAD, WebkitBackgroundClip: "text", backgroundClip: "text",
+                WebkitTextFillColor: "transparent", color: "transparent" }}>{ch}</span>
+            ))}
+            {" AT UW".split("").map((ch, i) => (
+              <span key={`a${i}`} className="letter" style={{ display: "inline-block", opacity: 0,
+                fontSize: 22, fontWeight: 700, letterSpacing: 3, color: GOLD, alignSelf: "center" }}>
+                {ch === " " ? "\u00A0" : ch}
+              </span>
+            ))}
+          </div>
+
           <div className="hero-kicker" style={{ opacity: 0, display: "inline-flex", alignItems: "center", gap: 8,
             padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
             border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24 }}>
             <Star8 size={16} color={GOLD} /> <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".5px" }}>
               {data.hero.kicker ?? seed.hero.kicker}</span>
           </div>
-          {/* headline — noticeably larger, tighter tracking, masked word-by-word
-              reveal, and the final word carries the signature gradient */}
+
           <h1 style={{ fontSize: "clamp(40px,7.4vw,86px)", fontWeight: 800, lineHeight: 1.02,
             letterSpacing: "-2.6px", margin: "0 0 24px" }}>
             {titleWords.map((w, i) => {
@@ -2142,12 +2316,17 @@ function HomeSection({ data, onNav, curtainDone }) {
             {data.hero.mission}
           </p>
           <div className="hero-cta" style={{ opacity: 0, display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-            <Magnetic><button className="btn" onClick={() => onNav("connect")} style={btnGold}>Join MSA</button></Magnetic>
-            <Magnetic><button className="btn" onClick={() => onNav("events")} style={btnGhost}>See what's on</button></Magnetic>
-            <Magnetic><button className="btn donatepulse" onClick={() => onNav("donate")}
-              style={{ ...btnGhost, borderColor: "rgba(201,182,136,.65)", color: GOLD,
-                display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <Heart size={17} /> Donate
+            <Magnetic><button className="btn" onClick={() => onNav("connect")}
+              style={{ padding: "14px 30px", borderRadius: 12, fontWeight: 700, fontSize: 15.5,
+                border: "none", cursor: "pointer", color: "#fff",
+                background: `linear-gradient(120deg, ${PURPLE}, #E8A9D6)` }}>
+              Get Involved
+            </button></Magnetic>
+            <Magnetic><button className="btn" onClick={() => onNav("gallery")}
+              style={{ padding: "14px 30px", borderRadius: 12, fontWeight: 700, fontSize: 15.5,
+                background: "transparent", color: "#fff", cursor: "pointer",
+                border: "1px solid rgba(232,169,214,.5)" }}>
+              Learn More
             </button></Magnetic>
           </div>
         </div>
@@ -2156,6 +2335,11 @@ function HomeSection({ data, onNav, curtainDone }) {
         <div style={{ position: "relative" }}>
           <GirihBand color="rgba(183,165,122,.45)" height={54} opacity={1} unit={54} />
         </div>
+        <style>{`
+          @keyframes msaWindowFlicker {
+            0%, 100% { opacity: .35; } 45% { opacity: 1; } 52% { opacity: .5; } 60% { opacity: .95; }
+          }
+        `}</style>
       </section>
 
       {/* Gallery */}
@@ -2531,6 +2715,77 @@ function Gallery({ items }) {
   const [paused, setPaused] = useState(false);
   const reduced = useReducedMotion();
   const DWELL = 5600;
+  const scalerImgRef = useRef(null);
+  const gridRef = useRef(null);
+
+  // Scroll-driven "moments" opener: a full-bleed photo that shrinks down
+  // into a normal image as you scroll through the gallery section, while
+  // the thumbnail layers beneath it fade + scale in with staggered easing.
+  // Loaded from the same motion.js build used for the effect elsewhere on
+  // the site (dynamic import so it isn't pulled into the main bundle).
+  useEffect(() => {
+    if (reduced || !items?.length) return;
+    let cancelled = false;
+    const cleanups = [];
+
+    (async () => {
+      const { animate: manimate, scroll: mscroll, stagger: mstagger, cubicBezier } =
+        await import("https://cdn.jsdelivr.net/npm/motion@11.11.16/+esm");
+      if (cancelled) return;
+
+      const section = document.getElementById("gallery");
+      const image = scalerImgRef.current;
+      const layers = gridRef.current
+        ? gridRef.current.querySelectorAll(":scope > .layer")
+        : [];
+      if (!section || !image) return;
+
+      const naturalWidth = image.offsetWidth;
+      const naturalHeight = image.offsetHeight;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      cleanups.push(mscroll(
+        manimate(image, {
+          width: [viewportWidth, naturalWidth],
+          height: [viewportHeight, naturalHeight],
+        }, {
+          width: { easing: cubicBezier(0.65, 0, 0.35, 1) },
+          height: { easing: cubicBezier(0.42, 0, 0.58, 1) },
+        }),
+        { target: section, offset: ["start start", "80% end"] }
+      ));
+
+      const scaleEasings = [
+        cubicBezier(0.42, 0, 0.58, 1),
+        cubicBezier(0.76, 0, 0.24, 1),
+        cubicBezier(0.87, 0, 0.13, 1),
+      ];
+
+      layers.forEach((layer, index) => {
+        const endOffset = `${1 - (index % scaleEasings.length) * 0.05} end`;
+        cleanups.push(mscroll(
+          manimate(layer, { opacity: [0, 0, 1] }, {
+            offset: [0, 0.55, 1],
+            easing: cubicBezier(0.61, 1, 0.88, 1),
+          }),
+          { target: section, offset: ["start start", endOffset] }
+        ));
+        cleanups.push(mscroll(
+          manimate(layer, { scale: [0, 0, 1] }, {
+            offset: [0, 0.3, 1],
+            easing: scaleEasings[index % scaleEasings.length],
+          }),
+          { target: section, offset: ["start start", endOffset] }
+        ));
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      cleanups.forEach((stop) => { try { stop?.(); } catch {} });
+    };
+  }, [reduced, items]);
 
   const go = useCallback((n) => {
     setI((cur) => {
@@ -2559,9 +2814,28 @@ function Gallery({ items }) {
     return g[n % g.length];
   };
 
+  const galleryHero = items?.[0];
+
   return (
     <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
          onFocusCapture={() => setPaused(true)} onBlurCapture={() => setPaused(false)}>
+      {/* ── Moments opener — full-bleed photo that shrinks into place as you
+          scroll through the gallery, via the site-wide scroll-scale effect ── */}
+      {galleryHero && (
+        <div className="scaler" style={{ marginBottom: 22 }}>
+          {galleryHero.img ? (
+            <img ref={scalerImgRef} src={galleryHero.img}
+              alt={galleryHero.caption || "Community moment"}
+              style={{ display: "block", width: "100%", height: "auto", maxHeight: 420,
+                margin: "0 auto", borderRadius: 22, objectFit: "cover",
+                boxShadow: "0 24px 60px rgba(20,17,24,.22)" }} />
+          ) : (
+            <div ref={scalerImgRef} style={{ width: "100%", height: 320, borderRadius: 22,
+              background: grad(0), boxShadow: "0 24px 60px rgba(20,17,24,.22)" }} />
+          )}
+        </div>
+      )}
+
       {/* Featured slide — every slide is layered and crossfaded, so there is
           never a hard swap. The active slide also drifts (Ken Burns). */}
       <Reveal variant="rise" distance={34} duration={DUR.slow}>
@@ -2643,10 +2917,13 @@ function Gallery({ items }) {
         </div>
       </Reveal>
 
-      {/* Thumbnails — stagger in, and the active one lifts */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(90px,1fr))", gap: 10 }}>
+      {/* Thumbnails — each one is a "layer" that scales/fades in as you
+          scroll, driven by the same motion.js effect as the opener above.
+          The active one still lifts on interaction. */}
+      <div ref={gridRef} className="grid"
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(90px,1fr))", gap: 10 }}>
         {items.map((it, n) => (
-          <Reveal key={it.id ?? n} delay={n * 60} variant="up" distance={16} duration={DUR.base}>
+          <div key={it.id ?? n} className="layer" style={{ opacity: reduced ? 1 : 0 }}>
             <button onClick={() => go(n)} aria-label={it.caption} className="zoomable"
               style={{ width: "100%", height: 66, borderRadius: 12,
                 border: n === i ? `2px solid ${GOLD}` : "2px solid transparent",
@@ -2661,7 +2938,7 @@ function Gallery({ items }) {
               <span style={{ position: "absolute", bottom: 4, left: 6, fontSize: 10.5, fontWeight: 600,
                 color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,.7)", zIndex: 1 }}>{it.tag}</span>
             </button>
-          </Reveal>
+          </div>
         ))}
       </div>
     </div>
@@ -3205,10 +3482,14 @@ function HeroVideo({ config }) {
 
   useEffect(() => {
     if (!src || reduced) { setAllowed(false); return; }
-    // Respect data-saver and very slow connections.
+    // Respect data-saver and very slow connections, and skip decoding an
+    // autoplaying background video on small/phone-width screens — it's one
+    // of the biggest single sources of mobile jank, and the poster image
+    // (or gradient) reads just as well at that size.
     const c = navigator.connection;
     const slow = c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ""));
-    setAllowed(!slow);
+    const narrow = window.innerWidth < 640;
+    setAllowed(!slow && !narrow);
   }, [src, reduced]);
 
   if (!src) return null;
