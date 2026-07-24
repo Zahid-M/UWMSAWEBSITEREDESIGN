@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { supabase, loadContent, saveContent, uploadImage, deleteImage, pathFromUrl } from "./supabase";
+import { supabase, loadContent, saveContent, uploadImage, deleteImage, pathFromUrl,
+  subscribe, listSubscribers } from "./supabase";
 import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
   Lock, LogOut, Plus, Trash2, Edit3, ChevronLeft, ChevronRight,
   Home, Star, HandHeart, GraduationCap, Sparkles, ExternalLink, Save,
-  Sun, Moon, ChevronDown, Mail, Send, CalendarDays, LayoutGrid, Info
+  Sun, Moon, ChevronDown, Mail, Send, CalendarDays, LayoutGrid, Info, Search
 } from "lucide-react";
 
 /* ============================================================
@@ -817,8 +818,35 @@ function StatsBand({ stats }) {
 
 const seed = {
   hero: {
-    title: "University of Washington Muslim Student Association",
-    mission: "A home away from home for Muslim Huskies — building faith, friendship, and community on Montlake and beyond.",
+    // `kicker` is the small line above the headline.
+    kicker: "University of Washington · Since 1968",
+    // Short, punchy headlines read better over video. One per line.
+    title: "Faith. Community. Belonging.",
+    mission: "A home away from home for Muslim Huskies — worship, learning, friendship, and service.",
+  },
+  // ── Announcement bar (above the nav) ──────────────────────────────────
+  bar: {
+    on: true,
+    text: "Board applications for 2026–27 are open — deadline November 14.",
+    linkLabel: "Apply now",
+    href: "",
+  },
+  // ── Hero background video ─────────────────────────────────────────────
+  // Drop a file in public/ (e.g. public/hero.mp4) and put its name here.
+  // Leave `src` blank and the hero keeps its gradient — nothing breaks.
+  heroVideo: {
+    src: "",           // e.g. "hero.mp4"
+    poster: "",        // e.g. "hero-poster.jpg" — shown while the video loads
+    dim: 0.55,         // 0–1, how much to darken the footage for text contrast
+  },
+  // ── Mailing list ──────────────────────────────────────────────────────
+  mailing: {
+    on: true,
+    title: "Start with the mailing list",
+    body: "One email a week. Everything happening in the community, nothing more.",
+    // Optional: a Google Form / Mailchimp URL. If set, the form links out
+    // instead of saving to Supabase.
+    externalUrl: "",
   },
   // ── Section copy ──────────────────────────────────────────────────────
   // Every section's eyebrow, heading and intro paragraph live here so
@@ -1025,7 +1053,8 @@ const linkIcon = (k) => {
 function mergeContent(base, saved) {
   const out = { ...base, ...saved };
   for (const key of ["hero", "sections", "prayerTimes", "events", "about",
-                     "islamicHouse", "contact", "donate", "eventsExtra"]) {
+                     "islamicHouse", "contact", "donate", "eventsExtra",
+                     "bar", "heroVideo", "mailing"]) {
     if (base[key] && typeof base[key] === "object" && !Array.isArray(base[key])) {
       const savedVal = saved?.[key];
       if (savedVal && typeof savedVal === "object" && !Array.isArray(savedVal)) {
@@ -1071,6 +1100,18 @@ export default function App() {
 
   // Cherry blossom petals — on by default, but the visitor's choice sticks.
   // Anyone who prefers reduced motion starts with them off.
+  const [searchOpen, setSearchOpen] = useState(false);
+  // ⌘K / Ctrl-K opens search from anywhere.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault(); setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   const [petals, setPetals] = useState(() => {
     try {
       const saved = localStorage.getItem("msa-petals");
@@ -1135,10 +1176,14 @@ export default function App() {
         color: "var(--text)", background: "var(--bg)", minHeight: "100vh" }}>
       <StyleTag />
       {petals && <SakuraWind dark={dark} />}
+      <AnnouncementBar bar={data.bar} onNav={scrollTo} />
       <Nav active={active} onNav={scrollTo} menuOpen={menuOpen} setMenuOpen={setMenuOpen}
            onAdmin={() => setAdminOpen(true)} isAdmin={isAdmin}
            dark={dark} onToggleDark={() => setDark((d) => !d)}
-           petals={petals} onTogglePetals={() => setPetals((p) => !p)} />
+           petals={petals} onTogglePetals={() => setPetals((p) => !p)}
+           onSearch={() => setSearchOpen(true)} />
+      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)}
+        data={data} onNav={scrollTo} />
       <main>
         <HomeSection data={data} onNav={scrollTo} />
         <AnnouncementsSection data={data} />
@@ -1152,6 +1197,7 @@ export default function App() {
         <ProgramsSection data={data} />
         <BoardSection data={data} />
         <ConnectSection data={data} />
+        <MailingList data={data} />
         <ContactSection data={data} />
       </main>
       <Footer onAdmin={() => setAdminOpen(true)} data={data} onNav={scrollTo} />
@@ -1329,6 +1375,14 @@ function StyleTag() {
       }
       .donatepulse { animation: donateGlow 3.6s ${EASE.inOut} infinite; }
 
+      /* ── Announcement bar link ──────────────────────────────────────── */
+      .barlink { display: inline-flex; align-items: center; gap: 3px; color: ${GOLD};
+                 background: none; border: none; padding: 0; cursor: pointer;
+                 font-family: inherit; font-size: 13.5px; font-weight: 700;
+                 text-decoration: none; white-space: nowrap;
+                 transition: gap ${DUR.fast}ms ${EASE.out}; }
+      .barlink:hover { gap: 7px; text-decoration: underline; }
+
       /* ── Ambient scroll lighting ────────────────────────────────────── */
       @keyframes lightDrift {
         0%   { transform: translate3d(0,0,0) scale(1); opacity: .5; }
@@ -1388,7 +1442,7 @@ function StyleTag() {
 }
 
 function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark,
-  petals, onTogglePetals }) {
+  petals, onTogglePetals, onSearch }) {
   const [solid, setSolid] = useState(false);
   const [progress, setProgress] = useState(0);
   const [openMenu, setOpenMenu] = useState(null);  // which dropdown is open
@@ -1528,6 +1582,10 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
             );
           })}
 
+          <button className="btn" onClick={onSearch} aria-label="Search the site"
+            title="Search (⌘K)" style={iconBtn}>
+            <Search size={16} color="var(--accent)" />
+          </button>
           <button className="btn" onClick={onTogglePetals} aria-pressed={!!petals}
             title={petals ? "Turn off falling petals" : "Turn on falling petals"}
             aria-label={petals ? "Turn off falling petals" : "Turn on falling petals"}
@@ -1618,6 +1676,9 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
           })}
 
           <div style={{ height: 1, background: "var(--border)", margin: "14px 0 6px" }} />
+          <button onClick={() => { setMenuOpen(false); onSearch?.(); }} style={mobLink}>
+            <Search size={15} /> Search
+          </button>
           <button onClick={onToggleDark} style={mobLink}>
             {dark ? <Sun size={15} /> : <Moon size={15} />} {dark ? "Light mode" : "Dark mode"}
           </button>
@@ -1802,8 +1863,9 @@ function HomeSection({ data, onNav }) {
   return (
     <>
       <section id="home" style={{ position: "relative", overflow: "hidden",
-        background: GRAD_DEEP,
+        background: GRAD_DEEP,   // stays as the base layer when no video is set
         color: "#fff", padding: "104px 20px 0" }}>
+        <HeroVideo config={data.heroVideo} />
         <AmbientGlow />
         <PatternField />
         {/* large medallion behind the hero content, turning with scroll */}
@@ -1827,7 +1889,7 @@ function HomeSection({ data, onNav }) {
               padding: "7px 16px", borderRadius: 999, background: "rgba(201,182,136,.16)",
               border: `1px solid rgba(201,182,136,.4)`, marginBottom: 24 }}>
               <Star8 size={16} color={GOLD} /> <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".5px" }}>
-                Est. at the University of Washington</span>
+                {data.hero.kicker ?? seed.hero.kicker}</span>
             </div>
           </HeroIntro>
           <h1 style={{ fontSize: "clamp(32px,5.5vw,58px)", fontWeight: 800, lineHeight: 1.08,
@@ -2830,6 +2892,364 @@ function SectionLight({ tone = "violet", intensity = 1, placement = "top-left" }
   );
 }
 
+/* ── Announcement bar ───────────────────────────────────────────────────
+   Sits above the nav. Dismissal is remembered per-message, so editing the
+   text in the admin panel re-shows it to everyone who dismissed the old one. */
+function AnnouncementBar({ bar, onNav }) {
+  const [dismissed, setDismissed] = useState(true);
+  // Hash the text so a new message counts as a new bar.
+  const sig = React.useMemo(() => {
+    const t = `${bar?.text || ""}|${bar?.linkLabel || ""}|${bar?.href || ""}`;
+    let h = 0;
+    for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+    return String(h);
+  }, [bar]);
+
+  useEffect(() => {
+    try { setDismissed(localStorage.getItem("msa-bar") === sig); }
+    catch { setDismissed(false); }
+  }, [sig]);
+
+  if (!bar?.on || !bar?.text || dismissed) return null;
+
+  const close = () => {
+    setDismissed(true);
+    try { localStorage.setItem("msa-bar", sig); } catch {}
+  };
+
+  const isInternal = bar.href && bar.href.startsWith("#");
+  const label = bar.linkLabel || "";
+
+  return (
+    <div style={{ position: "relative", zIndex: 51,
+      background: `linear-gradient(100deg, ${PURPLE_D}, ${PURPLE} 55%, ${VIOLET})`,
+      color: "#fff" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "9px 44px 9px 20px",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+        flexWrap: "wrap", fontSize: 13.5, lineHeight: 1.45, textAlign: "center" }}>
+        <Star8 size={13} color={GOLD} />
+        <span>{bar.text}</span>
+        {label && bar.href && (
+          isInternal ? (
+            <button onClick={() => onNav?.(bar.href.slice(1))} className="barlink">
+              {label} <ChevronRight size={13} />
+            </button>
+          ) : (
+            <a href={bar.href} target="_blank" rel="noopener noreferrer" className="barlink">
+              {label} <ChevronRight size={13} />
+            </a>
+          )
+        )}
+      </div>
+      <button onClick={close} aria-label="Dismiss announcement"
+        style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+          background: "rgba(255,255,255,.12)", border: "none", borderRadius: 8,
+          width: 26, height: 26, display: "grid", placeItems: "center", cursor: "pointer" }}>
+        <X size={14} color="#fff" />
+      </button>
+    </div>
+  );
+}
+
+/* ── Hero background video ──────────────────────────────────────────────
+   Renders only when a source is configured, so the site keeps its gradient
+   hero until footage exists. Muted + playsInline + autoplay is the only
+   combination browsers allow to start on its own. Never loads on
+   reduced-motion or save-data connections. */
+function HeroVideo({ config }) {
+  const reduced = useReducedMotion();
+  const [ready, setReady] = useState(false);
+  const [allowed, setAllowed] = useState(false);
+  const ref = useRef(null);
+
+  const src = config?.src || "";
+  const poster = config?.poster || "";
+  const dim = typeof config?.dim === "number" ? config.dim : 0.55;
+
+  useEffect(() => {
+    if (!src || reduced) { setAllowed(false); return; }
+    // Respect data-saver and very slow connections.
+    const c = navigator.connection;
+    const slow = c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ""));
+    setAllowed(!slow);
+  }, [src, reduced]);
+
+  if (!src) return null;
+
+  const url = (p) => (/^https?:\/\//i.test(p) ? p : `${import.meta.env.BASE_URL}${p}`);
+
+  return (
+    <div aria-hidden="true" style={{ position: "absolute", inset: 0, overflow: "hidden",
+      zIndex: 0, pointerEvents: "none" }}>
+      {poster && (
+        <img src={url(poster)} alt=""
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+            objectFit: "cover",
+            opacity: ready ? 0 : 1,
+            transition: `opacity 900ms ${EASE.outSoft}` }} />
+      )}
+      {allowed && (
+        <video ref={ref} autoPlay muted loop playsInline preload="metadata"
+          poster={poster ? url(poster) : undefined}
+          onCanPlay={() => setReady(true)}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+            objectFit: "cover",
+            opacity: ready ? 1 : 0,
+            transform: ready ? "scale(1)" : "scale(1.04)",
+            transition: `opacity 1200ms ${EASE.outSoft}, transform 2200ms ${EASE.outSoft}` }}>
+          <source src={url(src)} type="video/mp4" />
+        </video>
+      )}
+      {/* Scrim — keeps headline contrast regardless of how bright the footage is */}
+      <div style={{ position: "absolute", inset: 0,
+        background: `linear-gradient(180deg, rgba(20,17,24,${(dim * 0.9).toFixed(2)}) 0%, rgba(20,17,24,${(dim * 0.62).toFixed(2)}) 45%, rgba(20,17,24,${Math.min(dim + 0.24, 0.95).toFixed(2)}) 100%)` }} />
+      <div style={{ position: "absolute", inset: 0,
+        background: `radial-gradient(ellipse at 50% 45%, transparent 0%, rgba(20,17,24,.42) 78%)` }} />
+    </div>
+  );
+}
+
+/* ── Mailing list ───────────────────────────────────────────────────────
+   Saves straight to Supabase, or links out if an external form is set. */
+function MailingList({ data }) {
+  const cfg = data?.mailing || seed.mailing;
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("Current student");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);   // {ok, text}
+
+  if (!cfg?.on) return null;
+
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    setMsg(null); setBusy(true);
+    const res = await subscribe({ firstName: first, lastName: last, email, status });
+    setBusy(false);
+    if (res.ok) {
+      setMsg({ ok: true, text: res.already
+        ? "You're already on the list — see you next week."
+        : "You're in. Look out for the next one." });
+      setFirst(""); setLast(""); setEmail("");
+    } else {
+      setMsg({ ok: false, text: res.error });
+    }
+  };
+
+  return (
+    <Band id="mailing" alt lattice rosettes="left" light lightTone="violet" lightAt="top-right">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 34,
+        alignItems: "center" }} className="mail-grid">
+        <div>
+          <Eyebrow>Stay in the loop</Eyebrow>
+          <Title>{cfg.title}</Title>
+          <Reveal delay={240} variant="up" distance={16}>
+            <p style={{ margin: "0 0 12px", color: "var(--text-muted)", fontSize: 16.5,
+              lineHeight: 1.7, maxWidth: 460 }}>{cfg.body}</p>
+          </Reveal>
+          <Reveal delay={320}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8,
+              color: "var(--text-faint)", fontSize: 13 }}>
+              <Star8 size={12} /> No spam, ever. Unsubscribe any time.
+            </div>
+          </Reveal>
+        </div>
+
+        <Reveal variant="rise" distance={28} delay={120} duration={DUR.slow}>
+          <div style={{ ...card, padding: "26px 26px 24px" }}>
+            {cfg.externalUrl ? (
+              <>
+                <p style={{ margin: "0 0 16px", color: "var(--text-muted)", fontSize: 14.5 }}>
+                  Sign up through our form — takes about ten seconds.
+                </p>
+                <a className="btn" href={cfg.externalUrl} target="_blank" rel="noopener noreferrer"
+                  style={{ ...btnPurple, textDecoration: "none", display: "inline-flex",
+                    alignItems: "center", gap: 8 }}>
+                  <Send size={15} /> Open the signup form
+                </a>
+              </>
+            ) : (
+              <form onSubmit={submit}>
+                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+                  <div>
+                    <label style={lbl} htmlFor="ml-first">First name</label>
+                    <input id="ml-first" style={inpSm} value={first} autoComplete="given-name"
+                      onChange={(e) => setFirst(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={lbl} htmlFor="ml-last">Last name</label>
+                    <input id="ml-last" style={inpSm} value={last} autoComplete="family-name"
+                      onChange={(e) => setLast(e.target.value)} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <label style={lbl} htmlFor="ml-email">Email</label>
+                  <input id="ml-email" type="email" required style={inpSm} value={email}
+                    autoComplete="email" placeholder="you@uw.edu"
+                    onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <label style={lbl} htmlFor="ml-status">I am a…</label>
+                  <select id="ml-status" style={inpSm} value={status}
+                    onChange={(e) => setStatus(e.target.value)}>
+                    <option>Current student</option>
+                    <option>Incoming student</option>
+                    <option>Alum</option>
+                    <option>Community member</option>
+                  </select>
+                </div>
+                <button type="submit" className="btn" disabled={busy}
+                  style={{ ...btnPurple, width: "100%", marginTop: 16, opacity: busy ? .6 : 1,
+                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <Send size={15} /> {busy ? "Signing you up…" : "Sign up"}
+                </button>
+                {msg && (
+                  <div role="status" style={{ marginTop: 12, fontSize: 13.5, lineHeight: 1.5,
+                    color: msg.ok ? "var(--accent)" : "#c0392b" }}>{msg.text}</div>
+                )}
+              </form>
+            )}
+          </div>
+        </Reveal>
+      </div>
+      <style>{`@media (max-width:820px){.mail-grid{grid-template-columns:1fr !important;}}`}</style>
+    </Band>
+  );
+}
+
+/* ── Site search ────────────────────────────────────────────────────────
+   Indexes everything already in `data` — no extra backend. Opens with the
+   nav button or ⌘K / Ctrl-K. */
+function buildIndex(data) {
+  const out = [];
+  const push = (type, title, sub, section) =>
+    title && out.push({ type, title: String(title), sub: sub ? String(sub) : "", section });
+
+  DAYS.forEach((d) => (data.events?.[d] || []).forEach((e) =>
+    push("Event", e.name, [d, e.time, e.loc].filter(Boolean).join(" · "), "events")));
+  (data.calendar || []).forEach((e) =>
+    push("Event", e.name, [e.date, e.time, e.loc].filter(Boolean).join(" · "), "events"));
+  (data.programs || []).forEach((p) => push("Program", p.name, p.desc, "programs"));
+  (data.board || []).forEach((m) =>
+    push("Board", m.name, [m.role, m.status === "previous" ? "Previous" : "Current"]
+      .filter(Boolean).join(" · "), "board"));
+  (data.prayerSpaces || []).forEach((s) => push("Prayer space", s.name, s.loc, "prayer"));
+  (data.announcements || []).forEach((a) => push("Announcement", a.title, a.body, "announcements"));
+  (data.links || []).forEach((l) => push("Link", l.name, l.href, "connect"));
+  (data.sponsors || []).forEach((s) => push("Sponsor", s.name, "", "sponsors"));
+  (data.about?.pillars || []).forEach((p) => push("About", p.title, p.text, "about"));
+  (data.islamicHouse?.features || []).forEach((f) =>
+    push("Islamic House", f.title, f.text, "islamic-house"));
+  return out;
+}
+
+function SearchOverlay({ open, onClose, data, onNav }) {
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(0);
+  const inputRef = useRef(null);
+  const index = React.useMemo(() => buildIndex(data), [data]);
+
+  const results = React.useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return [];
+    return index
+      .map((item) => {
+        const t = item.title.toLowerCase(), s = item.sub.toLowerCase();
+        // Title matches rank above body matches; prefix above substring.
+        let score = 0;
+        if (t.startsWith(term)) score = 100;
+        else if (t.includes(term)) score = 70;
+        else if (s.includes(term)) score = 35;
+        else return null;
+        return { ...item, score };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+  }, [q, index]);
+
+  useEffect(() => { setSel(0); }, [q]);
+  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 40); }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowDown") { e.preventDefault(); setSel((i) => Math.min(i + 1, results.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setSel((i) => Math.max(i - 1, 0)); }
+      else if (e.key === "Enter" && results[sel]) {
+        e.preventDefault(); onNav(results[sel].section); onClose();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, results, sel, onNav, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Search" className="modalBg"
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(20,12,40,.55)",
+        backdropFilter: "blur(5px)", display: "grid", placeItems: "start center",
+        padding: "12vh 16px 16px" }}>
+      <div onClick={(e) => e.stopPropagation()} className="modalIn"
+        style={{ ...card, width: "100%", maxWidth: 560, padding: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px",
+          borderBottom: "1px solid var(--border)" }}>
+          <Search size={17} color="var(--accent)" />
+          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search events, programs, people…"
+            aria-label="Search the site"
+            style={{ flex: 1, border: "none", outline: "none", background: "transparent",
+              fontFamily: "inherit", fontSize: 16, color: "var(--text)" }} />
+          <kbd style={{ fontSize: 11, color: "var(--text-faint)",
+            border: "1px solid var(--border-strong)", borderRadius: 6, padding: "2px 6px" }}>Esc</kbd>
+        </div>
+        <div style={{ maxHeight: "52vh", overflowY: "auto", padding: 8 }}>
+          {!q.trim() && (
+            <div style={{ padding: "18px 12px", fontSize: 13.5, color: "var(--text-faint)",
+              lineHeight: 1.7 }}>
+              Try “jummah”, “halaqa”, “president”, or “iftar”.
+            </div>
+          )}
+          {q.trim() && results.length === 0 && (
+            <div style={{ padding: "18px 12px", fontSize: 13.5, color: "var(--text-faint)" }}>
+              Nothing matched “{q.trim()}”.
+            </div>
+          )}
+          {results.map((r, i) => (
+            <button key={`${r.type}-${r.title}-${i}`}
+              onMouseEnter={() => setSel(i)}
+              onClick={() => { onNav(r.section); onClose(); }}
+              style={{ display: "flex", alignItems: "center", gap: 12, width: "100%",
+                textAlign: "left", padding: "11px 12px", borderRadius: 10, border: "none",
+                cursor: "pointer", fontFamily: "inherit",
+                background: i === sel ? "var(--tint-2)" : "transparent",
+                transition: `background ${DUR.fast}ms ${EASE.out}` }}>
+              <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".8px",
+                textTransform: "uppercase", color: "var(--accent)", flexShrink: 0,
+                border: "1px solid var(--border-strong)", borderRadius: 99,
+                padding: "3px 8px" }}>{r.type}</span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14.5, fontWeight: 600,
+                  color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
+                  textOverflow: "ellipsis" }}>{r.title}</span>
+                {r.sub && (
+                  <span style={{ display: "block", fontSize: 12.5, color: "var(--text-faint)",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {r.sub}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- ABOUT ---------- */
 function AboutSection({ data }) {
   const about = data.about || seed.about;
@@ -3738,7 +4158,8 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
             <div style={{ width: 190, borderRight: "1px solid var(--border)", padding: 12,
               overflowY: "auto", background: "var(--surface-2)" }}>
               {[
-                ["hero", "Home / Hero"], ["copy", "Section text"],
+                ["hero", "Home / Hero"], ["bar", "Top bar & video"],
+                ["copy", "Section text"], ["mailing", "Mailing list"],
                 ["announce", "Announcements"], ["about", "About"],
                 ["donate", "Donate"], ["house", "Islamic House"],
                 ["gallery", "Photos"], ["sponsors", "Sponsors"], ["board", "Board members"],
@@ -3788,7 +4209,11 @@ function Editor({ tab, data, setData }) {
   if (tab === "hero")
     return (
       <Section title="Home hero">
-        <Field label="Title">
+        <Field label="Kicker (small line above the headline)">
+          <input style={inp} value={data.hero.kicker ?? ""}
+            onChange={(e) => up({ hero: { ...data.hero, kicker: e.target.value } })} />
+        </Field>
+        <Field label="Headline — short lines read best over video">
           <textarea style={{ ...inp, minHeight: 70 }} value={data.hero.title}
             onChange={(e) => up({ hero: { ...data.hero, title: e.target.value } })} />
         </Field>
@@ -4370,6 +4795,95 @@ function Editor({ tab, data, setData }) {
     );
   }
 
+  if (tab === "bar") {
+    const bar = data.bar || seed.bar;
+    const setBar = (patch) => up({ bar: { ...bar, ...patch } });
+    const hv = data.heroVideo || seed.heroVideo;
+    const setHV = (patch) => up({ heroVideo: { ...hv, ...patch } });
+    return (
+      <Section title="Top bar & hero video">
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 9,
+          fontSize: 14, color: "var(--text-soft)", cursor: "pointer", marginBottom: 14 }}>
+          <input type="checkbox" checked={!!bar.on}
+            onChange={(e) => setBar({ on: e.target.checked })} />
+          Show the announcement bar above the navigation
+        </label>
+        <Field label="Bar message">
+          <input style={inp} value={bar.text || ""}
+            placeholder="e.g. Board applications close November 14."
+            onChange={(e) => setBar({ text: e.target.value })} />
+        </Field>
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+          <Field label="Link label (optional)">
+            <input style={inp} value={bar.linkLabel || ""} placeholder="Apply now"
+              onChange={(e) => setBar({ linkLabel: e.target.value })} />
+          </Field>
+          <Field label="Link URL — or #section">
+            <input style={inp} value={bar.href || ""} placeholder="https://…  or  #events"
+              onChange={(e) => setBar({ href: e.target.value })} />
+          </Field>
+        </div>
+        <p style={{ margin: "-4px 0 22px", fontSize: 12.5, color: "var(--text-faint)",
+          lineHeight: 1.6 }}>
+          Editing the message shows the bar again to everyone who dismissed the previous one.
+          Use <b>#events</b>, <b>#donate</b> etc. to scroll to a section instead of leaving the site.
+        </p>
+
+        <div style={{ height: 1, background: "var(--border)", margin: "6px 0 20px" }} />
+
+        <h4 style={{ margin: "0 0 6px", fontSize: 14.5, fontWeight: 700,
+          color: "var(--accent)" }}>Hero background video</h4>
+        <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "var(--text-faint)",
+          lineHeight: 1.65 }}>
+          Upload the file to the site's <b>public/</b> folder on GitHub, then put its
+          filename here (e.g. <b>hero.mp4</b>). Leave blank and the hero keeps its gradient.
+          Keep it under about 6&nbsp;MB, muted, and 8–15 seconds so it loops cleanly.
+        </p>
+        <Field label="Video filename or URL">
+          <input style={inp} value={hv.src || ""} placeholder="hero.mp4"
+            onChange={(e) => setHV({ src: e.target.value })} />
+        </Field>
+        <Field label="Poster image (shown while the video loads)">
+          <input style={inp} value={hv.poster || ""} placeholder="hero-poster.jpg"
+            onChange={(e) => setHV({ poster: e.target.value })} />
+        </Field>
+        <Field label={`Darkening: ${Math.round((hv.dim ?? 0.55) * 100)}% — raise it if the headline is hard to read`}>
+          <input type="range" min="0" max="0.9" step="0.05" style={{ width: "100%" }}
+            value={hv.dim ?? 0.55}
+            onChange={(e) => setHV({ dim: parseFloat(e.target.value) })} />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (tab === "mailing") {
+    const m = data.mailing || seed.mailing;
+    const setM = (patch) => up({ mailing: { ...m, ...patch } });
+    return (
+      <Section title="Mailing list">
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 9,
+          fontSize: 14, color: "var(--text-soft)", cursor: "pointer", marginBottom: 14 }}>
+          <input type="checkbox" checked={!!m.on}
+            onChange={(e) => setM({ on: e.target.checked })} />
+          Show the mailing list section
+        </label>
+        <Field label="Heading">
+          <input style={inp} value={m.title || ""}
+            onChange={(e) => setM({ title: e.target.value })} />
+        </Field>
+        <Field label="Description">
+          <textarea style={{ ...inp, minHeight: 70 }} value={m.body || ""}
+            onChange={(e) => setM({ body: e.target.value })} />
+        </Field>
+        <Field label="External form URL (optional — leave blank to collect signups here)">
+          <input style={inp} value={m.externalUrl || ""} placeholder="https://forms.gle/…"
+            onChange={(e) => setM({ externalUrl: e.target.value })} />
+        </Field>
+        <SubscriberList />
+      </Section>
+    );
+  }
+
   if (tab === "stats")
     return (
       <ListEditor title="Stats" items={data.stats || []}
@@ -4390,6 +4904,78 @@ function Editor({ tab, data, setData }) {
 }
 
 const lbl = { fontSize: 12, fontWeight: 600, color: "var(--text-faint)" };
+
+/* Admin-only: view and export mailing list signups. */
+function SubscriberList() {
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    setBusy(true); setErr("");
+    const res = await listSubscribers();
+    setBusy(false);
+    if (res.ok) setRows(res.rows);
+    else setErr(res.error);
+  };
+
+  const exportCsv = () => {
+    if (!rows?.length) return;
+    const head = ["First name", "Last name", "Email", "Status", "Joined"];
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [head.map(esc).join(",")].concat(
+      rows.map((r) => [r.first_name, r.last_name, r.email, r.status,
+        (r.created_at || "").slice(0, 10)].map(esc).join(","))
+    ).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `msa-subscribers-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        <h4 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "var(--accent)" }}>
+          Signups{rows ? ` (${rows.length})` : ""}</h4>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={load} disabled={busy} style={miniBtn}>
+            {busy ? "Loading…" : rows ? "Refresh" : "Load list"}</button>
+          {!!rows?.length && (
+            <button className="btn" onClick={exportCsv} style={miniBtn}>Export CSV</button>
+          )}
+        </div>
+      </div>
+      {err && <div style={{ fontSize: 13, color: "#c0392b", marginBottom: 8 }}>{err}</div>}
+      {rows && rows.length === 0 && (
+        <div style={{ fontSize: 13, color: "var(--text-faint)" }}>No signups yet.</div>
+      )}
+      {!!rows?.length && (
+        <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid var(--border)",
+          borderRadius: 10 }}>
+          {rows.map((r, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12,
+              padding: "9px 12px", fontSize: 13,
+              borderBottom: i < rows.length - 1 ? "1px solid var(--border)" : "none" }}>
+              <span style={{ color: "var(--text)", minWidth: 0, overflow: "hidden",
+                textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}
+                <span style={{ color: "var(--text-faint)" }}> · {r.email}</span>
+              </span>
+              <span style={{ color: "var(--text-faint)", flexShrink: 0 }}>
+                {(r.created_at || "").slice(0, 10)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.6 }}>
+        Only signed-in admins can read this list — it isn't exposed publicly.
+      </p>
+    </div>
+  );
+}
 
 function Section({ title, children }) {
   return (
