@@ -4,6 +4,10 @@ import { supabase, loadContent, saveContent, uploadImage, deleteImage, pathFromU
 // Lazy — keeps anime.js out of the initial bundle. It only downloads when
 // a visitor actually scrolls near the Quad section.
 const QuadTree = React.lazy(() => import("./QuadTree.jsx"));
+// Anime.js-powered hero motion: floating gold light + subtle cursor
+// parallax on the hero medallion, and the self-drawing geometric divider.
+import { floatingGlow, mouseParallax } from "./hero/lib/animations.js";
+const GeometricDivider = React.lazy(() => import("./hero/components/GeometricDivider.jsx"));
 import {
   Menu, X, Heart, MapPin, Clock, Calendar, Users, BookOpen,
   ShoppingBag, Instagram, Facebook, MessageCircle, Link2,
@@ -1195,6 +1199,7 @@ export default function App() {
         <DonateSection data={data} />
         <AboutSection data={data} />
         <QuadSection data={data} />
+        <React.Suspense fallback={null}><GeometricDivider color={GOLD} /></React.Suspense>
         <PrayerSection data={data} />
         <IslamicHouseSection data={data} />
         <SponsorsSection data={data} />
@@ -1890,16 +1895,36 @@ function Lead({ children, delay = 260, style }) {
 
 /* ---------- HOME ---------- */
 function HomeSection({ data, onNav }) {
+  const heroRef = useRef(null);      // el that listens for cursor movement
+  const rosetteRef = useRef(null);   // moves ≤16px toward the cursor
+  const glowARef = useRef(null);     // two soft gold lights drifting behind
+  const glowBRef = useRef(null);     // the hero content — anime.js loops
+
+  useEffect(() => {
+    const a = floatingGlow(glowARef.current, { x: 44, y: 28, duration: 15000 });
+    const b = floatingGlow(glowBRef.current, { x: -34, y: 22, duration: 18000, delay: 1500 });
+    const cleanupParallax = mouseParallax(heroRef.current, { target: rosetteRef.current, range: 16 });
+    return () => { a?.revert?.(); b?.revert?.(); cleanupParallax(); };
+  }, []);
+
   return (
     <>
-      <section id="home" className="grain vignette" style={{ position: "relative", overflow: "hidden",
+      <section id="home" ref={heroRef} className="grain vignette" style={{ position: "relative", overflow: "hidden",
         background: GRAD_DEEP,   // stays as the base layer when no video is set
         color: "#fff", padding: "104px 20px 0" }}>
         <HeroVideo config={data.heroVideo} />
         <AmbientGlow />
         <PatternField />
-        {/* large medallion behind the hero content, turning with scroll */}
-        <div aria-hidden="true" style={{ position: "absolute", top: "8%", left: "50%",
+        {/* soft gold light, drifting almost imperceptibly (anime.js loop) */}
+        <div aria-hidden="true" ref={glowARef} style={{ position: "absolute", top: "10%", left: "16%",
+          width: 380, height: 380, borderRadius: "50%", filter: "blur(90px)", pointerEvents: "none", zIndex: 0,
+          background: `radial-gradient(circle, rgba(201,182,136,.22) 0%, transparent 70%)` }} />
+        <div aria-hidden="true" ref={glowBRef} style={{ position: "absolute", bottom: "6%", right: "12%",
+          width: 320, height: 320, borderRadius: "50%", filter: "blur(80px)", pointerEvents: "none", zIndex: 0,
+          background: `radial-gradient(circle, rgba(91,61,140,.28) 0%, transparent 70%)` }} />
+        {/* large medallion behind the hero content, turning with scroll and
+            nudged (≤16px) toward the cursor via anime.js */}
+        <div aria-hidden="true" ref={rosetteRef} style={{ position: "absolute", top: "8%", left: "50%",
           marginLeft: -260, pointerEvents: "none", zIndex: 0 }}>
           <ScrollSpin speed={14}>
             <Rosette points={16} skip={7} size={520} color={GOLD}
