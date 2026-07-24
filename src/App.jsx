@@ -35,6 +35,7 @@ const SECTIONS = [
   { id: "prayer", label: "Prayer", external: false },
   { id: "events", label: "Events", external: false },
   { id: "programs", label: "Programs", external: false },
+  { id: "board", label: "Board", external: false },
   { id: "merch", label: "Merch", external: true, href: "https://intentionshq.com/products/msa-x-intentions-off-white-hoodie" },
   { id: "connect", label: "Connect", external: false },
 ];
@@ -306,6 +307,76 @@ function TextReveal({ text, delay = 0, step = 42, duration = DUR.slow,
   );
 }
 
+
+/* Small petal glyph for the toggle button. */
+function PetalIcon({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+      style={{ display: "block" }}>
+      <path d="M12 2 C14.5 6, 18 7, 20.5 6.5 C19.5 10, 20 13.5, 22 16 C18.5 16.5, 15.5 18.5, 14 22 C13 18.5, 12 17, 12 17 C12 17, 11 18.5, 10 22 C8.5 18.5, 5.5 16.5, 2 16 C4 13.5, 4.5 10, 3.5 6.5 C6 7, 9.5 6, 12 2 Z"
+        fill={color} />
+    </svg>
+  );
+}
+
+/* ── Light Markdown ─────────────────────────────────────────────────────
+   Admin-entered copy supports **bold**, *italic*, [links](url) and blank
+   lines for paragraphs. Rendered by building React elements — never
+   dangerouslySetInnerHTML, so admin text can't inject markup. */
+function inlineMd(text, keyPrefix = "m") {
+  const nodes = [];
+  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
+  let last = 0, m, i = 0;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    const tok = m[0];
+    if (tok.startsWith("**")) {
+      nodes.push(<strong key={`${keyPrefix}-b${i++}`}>{tok.slice(2, -2)}</strong>);
+    } else if (tok.startsWith("*")) {
+      nodes.push(<em key={`${keyPrefix}-i${i++}`}>{tok.slice(1, -1)}</em>);
+    } else {
+      const close = tok.indexOf("](");
+      const label = tok.slice(1, close);
+      const href = tok.slice(close + 2, -1);
+      const external = /^https?:\/\//i.test(href);
+      nodes.push(
+        <a key={`${keyPrefix}-a${i++}`} href={href}
+          target={external ? "_blank" : undefined}
+          rel={external ? "noopener noreferrer" : undefined}
+          style={{ color: "var(--accent)", fontWeight: 600 }}>{label}</a>
+      );
+    }
+    last = m.index + tok.length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+function Markdown({ text, style }) {
+  if (!text) return null;
+  const paras = String(text).split(/\n\s*\n/).filter((p) => p.trim());
+  return (
+    <>
+      {paras.map((p, i) => (
+        <p key={i} style={{ margin: i === 0 ? "0 0 12px" : "0 0 12px", ...style }}>
+          {inlineMd(p.trim(), `p${i}`)}
+        </p>
+      ))}
+    </>
+  );
+}
+
+/* Pulls a section's admin-editable copy, falling back to the seed defaults
+   so a missing field never renders a blank heading. */
+function useSectionCopy(data, key) {
+  const fromData = data?.sections?.[key] || {};
+  const fallback = seed.sections?.[key] || {};
+  return {
+    eyebrow: fromData.eyebrow ?? fallback.eyebrow ?? "",
+    title: fromData.title ?? fallback.title ?? "",
+    body: fromData.body ?? fallback.body ?? "",
+  };
+}
 
 /* ── Rosette ────────────────────────────────────────────────────────────
    The circular medallion found in mosque domes, windows and tilework —
@@ -724,6 +795,42 @@ const seed = {
     title: "University of Washington Muslim Student Association",
     mission: "A home away from home for Muslim Huskies — building faith, friendship, and community on Montlake and beyond.",
   },
+  // ── Section copy ──────────────────────────────────────────────────────
+  // Every section's eyebrow, heading and intro paragraph live here so
+  // officers can rewrite them from the admin panel without touching code.
+  // `body` supports light Markdown: **bold**, *italic*, [text](url), and
+  // blank lines for paragraphs.
+  sections: {
+    gallery:  { eyebrow: "Our community", title: "Moments from the year",
+                body: "Eid celebrations, Jummah, retreats, and the everyday gatherings that make MSA home." },
+    sponsors: { eyebrow: "With support from", title: "Our sponsors & partners",
+                body: "" },
+    board:    { eyebrow: "Our team", title: "Board members",
+                body: "The students who keep MSA running — past and present." },
+    prayer:   { eyebrow: "Prayer", title: "Places & times to pray",
+                body: "" },
+    events:   { eyebrow: "This week", title: "Weekly calendar",
+                body: "Everything happening across the week — drop in anytime." },
+    programs: { eyebrow: "Get involved", title: "Our programs",
+                body: "Ways to grow, give back, and connect throughout the year." },
+    connect:  { eyebrow: "Connect", title: "Find your people",
+                body: "Join the group chats, follow along, and support the community." },
+    donate:   { title: "Support the MSA",
+                body: "Your donation funds events, iftars, and student programs." },
+  },
+  // ── Board members ─────────────────────────────────────────────────────
+  // status: "current" | "previous". `href` is optional; when set the card
+  // links out. `bio` shows in the expanded detail view.
+  board: [
+    { id: 1, name: "Example Name", role: "President", status: "current",
+      img: "", href: "", bio: "Add a short bio from the admin panel." },
+    { id: 2, name: "Example Name", role: "Vice President", status: "current",
+      img: "", href: "", bio: "" },
+    { id: 3, name: "Example Name", role: "Events Chair", status: "current",
+      img: "", href: "", bio: "" },
+    { id: 4, name: "Example Name", role: "Past President", status: "previous",
+      img: "", href: "", bio: "" },
+  ],
   // To use a real photo, add img: "//your-file.jpg" (file goes in public/gallery/).
   // Without img, the card shows a colored gradient placeholder.
   gallery: [
@@ -762,11 +869,12 @@ const seed = {
     // paste it into masjidalEmbed as a string and it will be used as-is.
     masjidalId: "RKxwXOdO",       // e.g. "1234"
     masjidalEmbed: "",    // OR paste a full <iframe ...></iframe> string
-    // ── Manual fallback (used only when both fields above are empty) ──────
-    // Fajr: "5:42 AM", Dhuhr: "1:15 PM", Asr: "4:50 PM",
-    // Maghrib: "7:38 PM", Isha: "9:05 PM",
-    // jummah: "First khutbah 1:00 PM · Second 2:15 PM at Islamic House",
-    // announcement: "Ramadan taraweeh begins after Isha — all welcome. Sisters' section on the east side.",
+    // ── Manual times (used only when both Masjidal fields above are empty) ──
+    Fajr: "5:42 AM", Dhuhr: "1:15 PM", Asr: "4:50 PM",
+    Maghrib: "7:38 PM", Isha: "9:05 PM",
+    // ── Always shown, under the widget or the manual times ──────────────
+    jummah: "First khutbah 1:00 PM · Second 2:15 PM at Islamic House",
+    announcement: "",
   },
   // Any event can take an optional img: "/events/your-file.jpg" (file in public/events/)
   // to show a banner photo at the top of its card. Monday shows the pattern.
@@ -816,6 +924,31 @@ const linkIcon = (k) => {
     instagram: <Instagram {...p} />, donate: <Heart {...p} /> }[k] || <Link2 {...p} />;
 };
 
+/* Merges saved content over the built-in defaults. Nested objects
+   (sections, prayerTimes, hero, events) merge key-by-key so a field the
+   admin has never touched keeps its default instead of vanishing. Arrays
+   are replaced wholesale — an admin deleting the last item must stick. */
+function mergeContent(base, saved) {
+  const out = { ...base, ...saved };
+  for (const key of ["hero", "sections", "prayerTimes", "events"]) {
+    if (base[key] && typeof base[key] === "object" && !Array.isArray(base[key])) {
+      const savedVal = saved?.[key];
+      if (savedVal && typeof savedVal === "object" && !Array.isArray(savedVal)) {
+        out[key] = { ...base[key], ...savedVal };
+        // sections is two levels deep — merge each section's fields too
+        if (key === "sections") {
+          for (const sk of Object.keys(base.sections)) {
+            if (savedVal[sk] && typeof savedVal[sk] === "object") {
+              out.sections[sk] = { ...base.sections[sk], ...savedVal[sk] };
+            }
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
 export default function App() {
   const [data, setData] = useState(seed);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -841,13 +974,28 @@ export default function App() {
     document.documentElement.style.colorScheme = dark ? "dark" : "light";
   }, [dark]);
 
+  // Cherry blossom petals — on by default, but the visitor's choice sticks.
+  // Anyone who prefers reduced motion starts with them off.
+  const [petals, setPetals] = useState(() => {
+    try {
+      const saved = localStorage.getItem("msa-petals");
+      if (saved !== null) return saved === "on";
+    } catch {}
+    if (typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
+    return true;
+  });
+  useEffect(() => {
+    try { localStorage.setItem("msa-petals", petals ? "on" : "off"); } catch {}
+  }, [petals]);
+
   // On load: pull saved content from Supabase (fall back to seed if empty),
   // and check whether an admin session is already active.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const remote = await loadContent();
-      if (!cancelled && remote) setData({ ...seed, ...remote });
+      if (!cancelled && remote) setData(mergeContent(seed, remote));
       const { data: { session } } = await supabase.auth.getSession();
       if (!cancelled) { setIsAdmin(!!session); setLoaded(true); }
     })();
@@ -891,16 +1039,18 @@ export default function App() {
       style={{ fontFamily: "'Poppins', system-ui, sans-serif",
         color: "var(--text)", background: "var(--bg)", minHeight: "100vh" }}>
       <StyleTag />
-      <SakuraWind dark={dark} />
+      {petals && <SakuraWind dark={dark} />}
       <Nav active={active} onNav={scrollTo} menuOpen={menuOpen} setMenuOpen={setMenuOpen}
            onAdmin={() => setAdminOpen(true)} isAdmin={isAdmin}
-           dark={dark} onToggleDark={() => setDark((d) => !d)} />
+           dark={dark} onToggleDark={() => setDark((d) => !d)}
+           petals={petals} onTogglePetals={() => setPetals((p) => !p)} />
       <main>
         <HomeSection data={data} onNav={scrollTo} />
         <PrayerSection data={data} />
         <EventsSection data={data} />
         <StatsBand stats={data.stats || []} />
         <ProgramsSection data={data} />
+        <BoardSection data={data} />
         <ConnectSection data={data} />
       </main>
       <Footer onAdmin={() => setAdminOpen(true)} />
@@ -1093,7 +1243,8 @@ function StyleTag() {
   );
 }
 
-function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark }) {
+function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark,
+  petals, onTogglePetals }) {
   const [solid, setSolid] = useState(false);
   const [progress, setProgress] = useState(0);
   // rAF-throttled so scrolling stays at 60fps even on long pages.
@@ -1161,6 +1312,21 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
               </button>
             )
           )}
+          <button className="btn" onClick={onTogglePetals}
+            aria-pressed={!!petals}
+            title={petals ? "Turn off falling petals" : "Turn on falling petals"}
+            aria-label={petals ? "Turn off falling petals" : "Turn on falling petals"}
+            style={{
+            marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
+            borderRadius: 10, border: `1px solid var(--border-strong)`,
+            background: petals ? "var(--nav-active-bg)" : "var(--surface)", cursor: "pointer" }}>
+            <span style={{ display: "grid", placeItems: "center",
+              opacity: petals ? 1 : .45,
+              transform: petals ? "rotate(0deg) scale(1)" : "rotate(-18deg) scale(.9)",
+              transition: `transform ${DUR.base}ms ${EASE.spring}, opacity ${DUR.fast}ms ${EASE.out}` }}>
+              <PetalIcon size={17} color="var(--accent)" />
+            </span>
+          </button>
           <button className="btn themetoggle" onClick={onToggleDark}
             aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} style={{
             marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
@@ -1201,6 +1367,10 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
           )}
           <button onClick={onToggleDark} style={mobLink}>
             {dark ? <Sun size={15} /> : <Moon size={15} />} {dark ? "Light mode" : "Dark mode"}
+          </button>
+          <button onClick={onTogglePetals} style={mobLink} aria-pressed={!!petals}>
+            <PetalIcon size={15} color="var(--accent)" />
+            {petals ? "Petals: on" : "Petals: off"}
           </button>
           <button onClick={() => { setMenuOpen(false); onAdmin(); }} style={mobLink}>
             <Lock size={15} /> Admin
@@ -1323,6 +1493,26 @@ function Title({ children, delay = 0 }) {
   );
 }
 
+/* Renders a section's eyebrow + title + intro from admin-editable copy.
+   Any field left blank in the admin panel is simply skipped. */
+function SectionCopy({ data, sectionKey, style }) {
+  const copy = useSectionCopy(data, sectionKey);
+  return (
+    <>
+      {copy.eyebrow && <Eyebrow>{copy.eyebrow}</Eyebrow>}
+      {copy.title && <Title>{copy.title}</Title>}
+      {copy.body && (
+        <Reveal delay={260} variant="up" distance={18}>
+          <div style={{ color: "var(--text-muted)", maxWidth: 560, marginBottom: 36,
+            fontSize: 16.5, lineHeight: 1.65, ...style }}>
+            <Markdown text={copy.body} style={{ margin: "0 0 10px" }} />
+          </div>
+        </Reveal>
+      )}
+    </>
+  );
+}
+
 /* Lead paragraph under a Title — reveals just after it. */
 function Lead({ children, delay = 260, style }) {
   return (
@@ -1399,16 +1589,13 @@ function HomeSection({ data, onNav }) {
         <Parallax speed={-.08} float style={{ bottom: 40, left: "4%" }}>
           <Star8 size={38} color={GOLD} opacity={.16} /></Parallax>
       </>}>
-        <Eyebrow>Our community</Eyebrow>
-        <Title>Moments from the year</Title>
-        <Lead>Eid celebrations, Jummah, retreats, and the everyday gatherings that make MSA home.</Lead>
+        <SectionCopy data={data} sectionKey="gallery" />
         <Gallery items={data.gallery} />
       </Band>
 
       {/* Sponsors */}
       <Band alt rosettes="wide">
-        <Eyebrow>With support from</Eyebrow>
-        <Title>Our sponsors & partners</Title>
+        <SectionCopy data={data} sectionKey="sponsors" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))",
           gap: 16, marginTop: 32 }}>
           {data.sponsors.map((s, n) => {
@@ -1442,8 +1629,11 @@ function HomeSection({ data, onNav }) {
             </div>
             <div style={{ position: "relative" }}>
               <h3 style={{ margin: "0 0 6px", color: "var(--accent)", fontSize: 21, fontWeight: 700 }}>
-                Support the MSA</h3>
-              <p style={{ margin: 0, color: "var(--text-muted)" }}>Your donation funds events, iftars, and student programs.</p>
+                {(data.sections?.donate?.title) ?? seed.sections.donate.title}</h3>
+              <div style={{ color: "var(--text-muted)" }}>
+                <Markdown text={(data.sections?.donate?.body) ?? seed.sections.donate.body}
+                  style={{ margin: 0 }} />
+              </div>
             </div>
             <a className="btn" href="https://www.zeffy.com/en-US/donation-form/44131d7a-557e-4fdc-9a70-14e9f67206ef"
                target="_blank" rel="noopener noreferrer"
@@ -1863,8 +2053,7 @@ function PrayerSection({ data }) {
   const t = data.prayerTimes;
   return (
     <Band id="prayer" alt lattice rosettes="right">
-      <Eyebrow>Prayer</Eyebrow>
-      <Title>Places & times to pray</Title>
+      <SectionCopy data={data} sectionKey="prayer" />
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 24, marginTop: 32,
         alignItems: "start" }} className="prayer-grid">
         <div style={{ display: "grid", gap: 16 }}>
@@ -1918,20 +2107,26 @@ function PrayerSection({ data }) {
             </div>
           )}
 
-          <div style={{ padding: "16px 24px", background: "rgba(183,165,122,.1)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <Calendar size={16} color={GOLD} />
-              <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--accent)" }}>Jummah</span>
+          {t.jummah && (
+            <div style={{ padding: "16px 24px", background: "rgba(183,165,122,.1)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <Calendar size={16} color={GOLD} />
+                <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--accent)" }}>Jummah</span>
+              </div>
+              <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.6 }}>
+                <Markdown text={t.jummah} style={{ margin: 0 }} />
+              </div>
             </div>
-            <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{t.jummah}</div>
-          </div>
+          )}
           {t.announcement && (
             <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <Sparkles size={16} color={GOLD} />
                 <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--accent)" }}>Announcement</span>
               </div>
-              <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.55 }}>{t.announcement}</div>
+              <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.55 }}>
+                <Markdown text={t.announcement} style={{ margin: 0 }} />
+              </div>
             </div>
           )}
         </div>
@@ -1946,9 +2141,7 @@ function PrayerSection({ data }) {
 function EventsSection({ data }) {
   return (
     <Band id="events" divider lattice decor="both" rosettes="both">
-      <Eyebrow>This week</Eyebrow>
-      <Title>Weekly calendar</Title>
-      <Lead>Everything happening across the week — drop in anytime.</Lead>
+      <SectionCopy data={data} sectionKey="events" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 16 }}>
         {DAYS.map((day, dn) => {
           const evs = data.events[day] || [];
@@ -1993,13 +2186,220 @@ function EventsSection({ data }) {
   );
 }
 
+/* ---------- BOARD MEMBERS ---------- */
+/* Compact revolving carousel, deliberately smaller in scale than the main
+   gallery. Tabs switch between current and previous board. Clicking a card
+   opens its bio; if the member has a link, the bio panel offers it. */
+function BoardSection({ data }) {
+  const [tab, setTab] = useState("current");
+  const [open, setOpen] = useState(null);   // id of expanded member
+  const [page, setPage] = useState(0);
+  const [perPage, setPerPage] = useState(4);
+  const reduced = useReducedMotion();
+
+  // How many cards fit at once — recalculated on resize.
+  useEffect(() => {
+    const calc = () => {
+      const w = window.innerWidth;
+      setPerPage(w < 560 ? 1 : w < 860 ? 2 : w < 1120 ? 3 : 4);
+    };
+    calc();
+    window.addEventListener("resize", calc, { passive: true });
+    return () => window.removeEventListener("resize", calc);
+  }, []);
+
+  const members = (data.board || []).filter((m) => (m.status || "current") === tab);
+  const pages = Math.max(1, Math.ceil(members.length / perPage));
+
+  // Keep the page in range when the tab or viewport changes.
+  useEffect(() => { setPage((p) => Math.min(p, pages - 1)); }, [pages, tab]);
+  useEffect(() => { setOpen(null); setPage(0); }, [tab]);
+
+  const openMember = members.find((m) => m.id === open);
+
+  const switchTab = (t) => { if (t !== tab) setTab(t); };
+
+  return (
+    <Band id="board" alt lattice rosettes="right" decor="left">
+      <SectionCopy data={data} sectionKey="board" />
+
+      {/* Tabs — the active pill slides between options */}
+      <Reveal variant="up" distance={16}>
+        <div role="tablist" aria-label="Board member groups"
+          style={{ display: "inline-flex", position: "relative", padding: 4, borderRadius: 999,
+            background: "var(--tint)", border: "1px solid var(--border)", marginBottom: 28 }}>
+          <span aria-hidden="true" style={{ position: "absolute", top: 4, bottom: 4,
+            left: 4, width: "calc(50% - 4px)", borderRadius: 999, background: "var(--surface)",
+            boxShadow: "var(--card-shadow)",
+            transform: tab === "current" ? "translateX(0)" : "translateX(100%)",
+            transition: reduced ? "none" : `transform ${DUR.base}ms ${EASE.out}` }} />
+          {[["current", "Current board"], ["previous", "Previous board"]].map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={tab === k} onClick={() => switchTab(k)}
+              style={{ position: "relative", zIndex: 1, border: "none", background: "none",
+                cursor: "pointer", padding: "9px 20px", borderRadius: 999,
+                fontFamily: "inherit", fontSize: 14, fontWeight: 700,
+                color: tab === k ? "var(--accent)" : "var(--text-muted)",
+                transition: `color ${DUR.fast}ms ${EASE.out}` }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </Reveal>
+
+      {members.length === 0 ? (
+        <div style={{ color: "var(--text-faint)", fontSize: 14.5, padding: "22px 0" }}>
+          No {tab === "current" ? "current" : "previous"} board members listed yet.
+        </div>
+      ) : (
+        <div style={{ position: "relative" }}>
+          {/* Track — translated by page, so it revolves rather than reflowing */}
+          <div style={{ overflow: "hidden" }}>
+            <div style={{ display: "flex",
+              transform: `translate3d(-${page * 100}%, 0, 0)`,
+              transition: reduced ? "none" : `transform ${DUR.slow}ms ${EASE.outSoft}` }}>
+              {Array.from({ length: pages }, (_, pi) => (
+                <div key={pi} style={{ flex: "0 0 100%", display: "grid", gap: 16,
+                  gridTemplateColumns: `repeat(${perPage}, minmax(0, 1fr))` }}>
+                  {members.slice(pi * perPage, pi * perPage + perPage).map((m, n) => (
+                    <BoardCard key={m.id} member={m} delay={n * 70}
+                      active={open === m.id}
+                      onOpen={() => setOpen(open === m.id ? null : m.id)} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {pages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 12, marginTop: 20 }}>
+              <button className="btn" aria-label="Previous board members"
+                onClick={() => setPage((p) => (p - 1 + pages) % pages)}
+                style={boardNavBtn}><ChevronLeft size={18} color="var(--accent)" /></button>
+              <div style={{ display: "flex", gap: 7 }}>
+                {Array.from({ length: pages }, (_, n) => (
+                  <button key={n} onClick={() => setPage(n)} aria-label={`Page ${n + 1}`}
+                    style={{ width: 22, height: 8, borderRadius: 99, border: "none",
+                      background: "transparent", cursor: "pointer", padding: 0,
+                      display: "grid", placeItems: "center" }}>
+                    <span aria-hidden="true" style={{ display: "block", width: 22, height: 8,
+                      borderRadius: 99, transformOrigin: "50% 50%",
+                      transform: n === page ? "scaleX(1)" : "scaleX(.34)",
+                      background: n === page ? GOLD : "var(--border-strong)",
+                      transition: `transform ${DUR.base}ms ${EASE.out}, background ${DUR.base}ms ${EASE.out}` }} />
+                  </button>
+                ))}
+              </div>
+              <button className="btn" aria-label="Next board members"
+                onClick={() => setPage((p) => (p + 1) % pages)}
+                style={boardNavBtn}><ChevronRight size={18} color="var(--accent)" /></button>
+            </div>
+          )}
+
+          {/* Expanded bio — grid-rows trick animates height without JS measuring */}
+          <div style={{ display: "grid",
+            gridTemplateRows: openMember ? "1fr" : "0fr",
+            opacity: openMember ? 1 : 0,
+            marginTop: openMember ? 20 : 0,
+            transition: reduced ? "none"
+              : `grid-template-rows ${DUR.base}ms ${EASE.out}, opacity ${DUR.base}ms ${EASE.out}, margin-top ${DUR.base}ms ${EASE.out}` }}>
+            <div style={{ overflow: "hidden" }}>
+              {openMember && (
+                <div style={{ ...card, padding: "22px 24px", display: "flex", gap: 18,
+                  alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 18, color: "var(--accent)" }}>
+                      {openMember.name}</div>
+                    <div style={{ fontSize: 13.5, color: "var(--text-faint)", marginBottom: 10 }}>
+                      {openMember.role}</div>
+                    {openMember.bio
+                      ? <div style={{ color: "var(--text-muted)", fontSize: 14.5, lineHeight: 1.65 }}>
+                          <Markdown text={openMember.bio} style={{ margin: "0 0 8px" }} /></div>
+                      : <div style={{ color: "var(--text-faint)", fontSize: 14 }}>No bio yet.</div>}
+                  </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {openMember.href && (
+                      <a className="btn" href={openMember.href} target="_blank" rel="noopener noreferrer"
+                        style={{ ...btnPurple, textDecoration: "none", display: "inline-flex",
+                          alignItems: "center", gap: 7 }}>
+                        Visit <ExternalLink size={14} />
+                      </a>
+                    )}
+                    <button className="btn" onClick={() => setOpen(null)}
+                      style={{ ...btnPurple, background: "var(--tint-2)", color: "var(--accent)" }}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </Band>
+  );
+}
+
+const boardNavBtn = {
+  width: 38, height: 38, borderRadius: 999, cursor: "pointer",
+  border: "1px solid var(--border-strong)", background: "var(--surface)",
+  display: "grid", placeItems: "center",
+};
+
+/* One board member. Compact portrait card; clicking toggles the bio panel. */
+function BoardCard({ member: m, delay = 0, active, onOpen }) {
+  const [hover, setHover] = useState(false);
+  const initials = String(m.name || "?").trim().split(/\s+/)
+    .slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("");
+  return (
+    <Reveal delay={delay} variant="rise" distance={24}>
+      <button onClick={onOpen} aria-expanded={!!active}
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+        className="lift zoomable"
+        style={{ ...card, width: "100%", padding: 0, overflow: "hidden", cursor: "pointer",
+          textAlign: "left", fontFamily: "inherit", display: "block",
+          borderColor: active ? GOLD : undefined,
+          borderWidth: active ? 2 : 1, borderStyle: "solid" }}>
+        <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1",
+          overflow: "hidden", background: `linear-gradient(140deg, ${PURPLE_D}, ${VIOLET})` }}>
+          {m.img
+            ? <img src={m.img} alt="" loading="lazy"
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            : <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
+                color: "rgba(255,255,255,.9)", fontSize: 30, fontWeight: 800, letterSpacing: 1 }}>
+                {initials || <Users size={30} />}
+              </div>}
+          {/* hover scrim hinting the card is interactive */}
+          <div aria-hidden="true" style={{ position: "absolute", inset: 0,
+            background: "linear-gradient(to top, rgba(20,17,24,.55), transparent 55%)",
+            opacity: hover || active ? 1 : 0.65,
+            transition: `opacity ${DUR.fast}ms ${EASE.out}` }} />
+          {m.href && (
+            <span aria-hidden="true" style={{ position: "absolute", top: 8, right: 8,
+              width: 26, height: 26, borderRadius: 8, display: "grid", placeItems: "center",
+              background: "rgba(255,255,255,.9)",
+              transform: hover ? "translate3d(0,-2px,0)" : "none",
+              transition: `transform ${DUR.fast}ms ${EASE.spring}` }}>
+              <ExternalLink size={13} color={PURPLE} />
+            </span>
+          )}
+        </div>
+        <div style={{ padding: "12px 14px 14px" }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-faint)", marginTop: 2,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.role}</div>
+        </div>
+      </button>
+    </Reveal>
+  );
+}
+
 /* ---------- PROGRAMS ---------- */
 function ProgramsSection({ data }) {
   return (
     <Band id="programs" alt divider lattice decor="right" rosettes="left">
-      <Eyebrow>Get involved</Eyebrow>
-      <Title>Our programs</Title>
-      <Lead>Ways to grow, give back, and connect throughout the year.</Lead>
+      <SectionCopy data={data} sectionKey="programs" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 20 }}>
         {data.programs.map((p, n) => (
           <Reveal key={p.id} delay={n * 85} variant="rise" distance={30} duration={DUR.slow}>
@@ -2045,9 +2445,7 @@ function ConnectSection({ data }) {
   }[k] || PURPLE);
   return (
     <Band id="connect" lattice decor="left" rosettes="wide">
-      <Eyebrow>Connect</Eyebrow>
-      <Title>Find your people</Title>
-      <Lead>Join the group chats, follow along, and support the community.</Lead>
+      <SectionCopy data={data} sectionKey="connect" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 16 }}>
         {data.links.map((l, n) => (
           <Reveal key={l.id} delay={n * 65} variant="rise" distance={26}>
@@ -2201,7 +2599,8 @@ function AdminPanel({ data, setData, isAdmin, setIsAdmin, persist, saving, onClo
             <div style={{ width: 190, borderRight: "1px solid var(--border)", padding: 12,
               overflowY: "auto", background: "var(--surface-2)" }}>
               {[
-                ["hero", "Home / Hero"], ["gallery", "Photos"], ["sponsors", "Sponsors"],
+                ["hero", "Home / Hero"], ["copy", "Section text"],
+                ["gallery", "Photos"], ["sponsors", "Sponsors"], ["board", "Board members"],
                 ["spaces", "Prayer spaces"], ["times", "Prayer times"], ["events", "Events"],
                 ["programs", "Programs"], ["stats", "Stats"], ["links", "Links"],
               ].map(([k, lbl]) => (
@@ -2296,16 +2695,24 @@ function Editor({ tab, data, setData }) {
             onChange={(e) => setT({ masjidalEmbed: e.target.value })}
             placeholder="<iframe ...></iframe>" />
         </Field>
+        <div style={{ margin: "4px 0 14px", padding: "10px 12px", borderRadius: 10,
+          background: "var(--tint)", fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.6 }}>
+          The manual times below are only used when both Masjidal fields above are empty.
+          Jummah and Announcement always show, either way.
+        </div>
         {["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"].map((p) => (
-          <Field key={p} label={p}>
-            <input style={inp} value={t[p]} onChange={(e) => setT({ [p]: e.target.value })} />
+          <Field key={p} label={`${p} (manual fallback)`}>
+            <input style={inp} value={t[p] ?? ""} onChange={(e) => setT({ [p]: e.target.value })} />
           </Field>
         ))}
-        <Field label="Jummah info">
-          <input style={inp} value={t.jummah} onChange={(e) => setT({ jummah: e.target.value })} />
+        <Field label="Jummah info (always shown)">
+          <input style={inp} value={t.jummah ?? ""}
+            placeholder="e.g. First khutbah 1:00 PM · Second 2:15 PM at Islamic House"
+            onChange={(e) => setT({ jummah: e.target.value })} />
         </Field>
-        <Field label="Announcement">
-          <textarea style={{ ...inp, minHeight: 70 }} value={t.announcement}
+        <Field label="Announcement (always shown — leave blank to hide the block)">
+          <textarea style={{ ...inp, minHeight: 70 }} value={t.announcement ?? ""}
+            placeholder="e.g. Ramadan taraweeh begins after Isha — all welcome."
             onChange={(e) => setT({ announcement: e.target.value })} />
         </Field>
       </Section>
@@ -2361,6 +2768,141 @@ function Editor({ tab, data, setData }) {
         blank={{ name: "New program", desc: "", icon: "star" }}
         fields={[["name", "Name"], ["desc", "Description"], ["icon", "Icon (book/star/grad/sparkles/hand/users)"]]} />
     );
+
+  if (tab === "copy") {
+    const SECTION_KEYS = [
+      ["gallery", "Photo gallery"], ["sponsors", "Sponsors"], ["board", "Board members"],
+      ["prayer", "Prayer"], ["events", "Events"], ["programs", "Programs"],
+      ["connect", "Connect"], ["donate", "Donate banner"],
+    ];
+    const sections = data.sections || {};
+    const setSection = (key, patch) => up({
+      sections: { ...sections, [key]: { ...(sections[key] || {}), ...patch } },
+    });
+    return (
+      <Section title="Section text">
+        <p style={{ margin: "-8px 0 18px", fontSize: 13, color: "var(--text-faint)", lineHeight: 1.6 }}>
+          Edit the heading and intro paragraph for each section. Leave a field blank to hide it.
+          Basic formatting works in the intro: <b>**bold**</b>, <i>*italic*</i>,
+          and [link text](https://example.com). Leave a blank line between paragraphs.
+        </p>
+        {SECTION_KEYS.map(([key, label]) => {
+          const cur = sections[key] || seed.sections[key] || {};
+          return (
+            <div key={key} style={{ marginBottom: 18, border: "1px solid var(--border)",
+              borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ padding: "10px 14px", background: "var(--tint)",
+                fontWeight: 700, color: "var(--accent)", fontSize: 13.5 }}>{label}</div>
+              <div style={{ padding: 14, display: "grid", gap: 10 }}>
+                {key !== "donate" && (
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>
+                      Eyebrow (small label above the heading)</label>
+                    <input style={inpSm} value={cur.eyebrow || ""}
+                      onChange={(e) => setSection(key, { eyebrow: e.target.value })} />
+                  </div>
+                )}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>
+                    Heading</label>
+                  <input style={inpSm} value={cur.title || ""}
+                    onChange={(e) => setSection(key, { title: e.target.value })} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>
+                    Intro paragraph</label>
+                  <textarea style={{ ...inpSm, minHeight: 74, resize: "vertical" }}
+                    value={cur.body || ""}
+                    onChange={(e) => setSection(key, { body: e.target.value })} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </Section>
+    );
+  }
+
+  if (tab === "board") {
+    const board = data.board || [];
+    const setBoard = (next) => up({ board: next });
+    const edit = (i, patch) => {
+      const c = [...board]; c[i] = { ...c[i], ...patch }; setBoard(c);
+    };
+    const add = (status) => setBoard([...board, {
+      id: Date.now(), name: "New member", role: "Role", status,
+      img: "", href: "", bio: "",
+    }]);
+    const groups = [["current", "Current board"], ["previous", "Previous board"]];
+    return (
+      <Section title="Board members">
+        <p style={{ margin: "-8px 0 18px", fontSize: 13, color: "var(--text-faint)", lineHeight: 1.6 }}>
+          Photos upload to storage; the link is optional and opens when someone clicks the card.
+          Move a member to “Previous” at the end of their term rather than deleting them.
+        </p>
+        {groups.map(([status, label]) => (
+          <div key={status} style={{ marginBottom: 22 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+              marginBottom: 10 }}>
+              <h4 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "var(--accent)" }}>
+                {label}</h4>
+              <button onClick={() => add(status)} style={miniBtn}>
+                <Plus size={14} /> Add</button>
+            </div>
+            <div style={{ display: "grid", gap: 14 }}>
+              {board.filter((m) => (m.status || "current") === status).length === 0 && (
+                <div style={{ color: "var(--text-faint)", fontSize: 13, padding: 8,
+                  textAlign: "center", border: "1px dashed var(--border)", borderRadius: 10 }}>
+                  None yet</div>
+              )}
+              {board.map((m, i) => (m.status || "current") !== status ? null : (
+                <div key={m.id} style={{ border: "1px solid var(--border)", borderRadius: 12,
+                  padding: 14, display: "grid", gap: 8, position: "relative" }}>
+                  <ImageField label="Photo" value={m.img || ""} folder="board"
+                    onChange={(url) => edit(i, { img: url })} />
+                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>Name</label>
+                      <input style={inpSm} value={m.name || ""}
+                        onChange={(e) => edit(i, { name: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>Role / title</label>
+                      <input style={inpSm} value={m.role || ""}
+                        onChange={(e) => edit(i, { role: e.target.value })} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>
+                      Link (optional)</label>
+                    <input style={inpSm} placeholder="https://…" value={m.href || ""}
+                      onChange={(e) => edit(i, { href: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>
+                      Mini bio</label>
+                    <textarea style={{ ...inpSm, minHeight: 70, resize: "vertical" }}
+                      value={m.bio || ""} onChange={(e) => edit(i, { bio: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-faint)" }}>Status</label>
+                    <select style={inpSm} value={m.status || "current"}
+                      onChange={(e) => edit(i, { status: e.target.value })}>
+                      <option value="current">Current</option>
+                      <option value="previous">Previous</option>
+                    </select>
+                  </div>
+                  <button onClick={() => setBoard(board.filter((_, n) => n !== i))}
+                    style={{ ...delBtn, position: "absolute", top: 10, right: 10 }}
+                    aria-label={`Delete ${m.name}`}><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </Section>
+    );
+  }
 
   if (tab === "stats")
     return (
