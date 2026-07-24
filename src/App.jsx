@@ -1908,9 +1908,15 @@ function HeroCurtain({ onDone }) {
   const rootRef = useRef(null);
   const strokeRef = useRef(null);
   const fillRef = useRef(null);
+  // Keep the latest onDone without making the mount effect depend on it —
+  // onDone is an inline arrow from the parent, so its identity changes on
+  // every App render. Depending on it directly re-ran this effect after the
+  // curtain had already unmounted and nulled out its refs.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   useEffect(() => {
-    if (reduced) { onDone?.(); return; }
+    if (reduced) { onDoneRef.current?.(); return; }
     const path = strokeRef.current;
     const len = path.getTotalLength();
     utils.set(path, { strokeDasharray: len, strokeDashoffset: len });
@@ -1918,7 +1924,7 @@ function HeroCurtain({ onDone }) {
     const tl = createTimeline({
       onComplete: () => {
         setVisible(false);
-        onDone?.();
+        onDoneRef.current?.();
       },
     });
     tl.add(path, { strokeDashoffset: [len, 0], duration: 1350, ease: "inOutSine" })
@@ -1926,7 +1932,7 @@ function HeroCurtain({ onDone }) {
       .add(rootRef.current, { opacity: 0, scale: 1.08, duration: 700, ease: "inExpo" }, "+=300");
 
     return () => tl?.revert?.();
-  }, [reduced, onDone]);
+  }, [reduced]);
 
   if (!visible) return null;
 
