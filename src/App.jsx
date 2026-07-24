@@ -307,6 +307,138 @@ function TextReveal({ text, delay = 0, step = 42, duration = DUR.slow,
 }
 
 
+/* ── Rosette ────────────────────────────────────────────────────────────
+   The circular medallion found in mosque domes, windows and tilework —
+   built the way it is drawn with a compass: a ring of overlapping circles,
+   concentric guides, radial spokes, and an n-point star traced by skipping
+   vertices. `skip` must be coprime with `points` or the star breaks into
+   separate polygons (12/3 gives three squares; 12/5 gives one star).
+   Rotates with scroll: turning as you move down, unwinding as you move up. */
+function Rosette({ points = 12, skip = 5, size = 260, color = "currentColor",
+  opacity = 0.5, strokeWidth = 1, style }) {
+  const R = 100;
+  const geom = React.useMemo(() => {
+    const circles = [];
+    for (let i = 0; i < points; i++) {
+      const a = (2 * Math.PI * i) / points;
+      circles.push({
+        cx: +(Math.cos(a) * R * 0.58).toFixed(2),
+        cy: +(Math.sin(a) * R * 0.58).toFixed(2),
+      });
+    }
+    const star = [];
+    for (let i = 0; i < points; i++) {
+      const a = (2 * Math.PI * ((i * skip) % points)) / points - Math.PI / 2;
+      star.push(`${(Math.cos(a) * R * 0.78).toFixed(2)},${(Math.sin(a) * R * 0.78).toFixed(2)}`);
+    }
+    const spokes = [];
+    for (let i = 0; i < points; i++) {
+      const a = (2 * Math.PI * i) / points - Math.PI / 2;
+      spokes.push({
+        x1: +(Math.cos(a) * R * 0.40).toFixed(2), y1: +(Math.sin(a) * R * 0.40).toFixed(2),
+        x2: +(Math.cos(a) * R).toFixed(2),        y2: +(Math.sin(a) * R).toFixed(2),
+      });
+    }
+    return { circles, star: star.join(" "), spokes };
+  }, [points, skip]);
+
+  return (
+    <svg viewBox="-110 -110 220 220" width={size} height={size} aria-hidden="true"
+      style={{ display: "block", opacity, overflow: "visible", ...style }}>
+      <g fill="none" stroke={color} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke">
+        <circle cx="0" cy="0" r={R} />
+        <circle cx="0" cy="0" r={R * 0.78} />
+        <circle cx="0" cy="0" r={R * 0.40} />
+        {geom.circles.map((c, i) => (
+          <circle key={i} cx={c.cx} cy={c.cy} r={R * 0.40} opacity="0.72" />
+        ))}
+        <polygon points={geom.star} />
+        {geom.spokes.map((l, i) => (
+          <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} opacity="0.6" />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+/* Wraps a Rosette (or anything) and spins it from scroll position.
+   `speed` is degrees per 100px scrolled; sign flips the direction. The
+   rotation is eased frame-to-frame so it glides rather than snapping,
+   and it naturally reverses when the user scrolls back up. */
+function ScrollSpin({ speed = 26, children, style, ...rest }) {
+  const ref = useRef(null);
+  const reduced = useReducedMotion();
+  const target = useRef(0);
+  const current = useRef(0);
+  const raf = useRef(0);
+
+  useEffect(() => {
+    if (reduced) return;
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => { target.current = (window.scrollY / 100) * speed; };
+    const tick = () => {
+      current.current += (target.current - current.current) * 0.07;
+      el.style.transform = `rotate(${current.current.toFixed(2)}deg)`;
+      raf.current = requestAnimationFrame(tick);
+    };
+    measure();
+    current.current = target.current;
+    el.style.transform = `rotate(${current.current.toFixed(2)}deg)`;
+    raf.current = requestAnimationFrame(tick);
+    window.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf.current);
+      window.removeEventListener("scroll", measure);
+    };
+  }, [speed, reduced]);
+
+  return (
+    <div ref={ref} aria-hidden="true"
+      style={{ willChange: "transform", ...style }} {...rest}>{children}</div>
+  );
+}
+
+/* Rosettes parked in the margins of a section. Positioned mostly outside the
+   content column so they fill empty edge space without crowding text. */
+function EdgeRosettes({ arrangement = "left" }) {
+  const sets = {
+    left: [
+      { top: "6%",  left: "-7%",  size: 300, points: 12, skip: 5, spin: 22,  op: .10 },
+      { bottom: "8%", left: "3%", size: 150, points: 8,  skip: 3, spin: -34, op: .085 },
+    ],
+    right: [
+      { top: "10%", right: "-6%", size: 280, points: 16, skip: 7, spin: -20, op: .10 },
+      { bottom: "12%", right: "4%", size: 160, points: 12, skip: 5, spin: 30, op: .085 },
+    ],
+    both: [
+      { top: "4%",  left: "-8%",  size: 320, points: 16, skip: 7, spin: 18,  op: .095 },
+      { top: "18%", right: "-7%", size: 240, points: 12, skip: 5, spin: -26, op: .095 },
+      { bottom: "6%", left: "42%", size: 130, points: 8, skip: 3, spin: 40,  op: .07 },
+    ],
+    wide: [
+      { top: "12%", left: "-5%",  size: 220, points: 12, skip: 5, spin: 24,  op: .09 },
+      { bottom: "10%", right: "-5%", size: 260, points: 16, skip: 7, spin: -18, op: .09 },
+    ],
+  };
+  const items = sets[arrangement] || sets.left;
+  return (
+    <>
+      {items.map((r, i) => (
+        <div key={i} aria-hidden="true" style={{
+          position: "absolute", pointerEvents: "none", zIndex: 0,
+          top: r.top, left: r.left, right: r.right, bottom: r.bottom,
+        }}>
+          <ScrollSpin speed={r.spin}>
+            <Rosette points={r.points} skip={r.skip} size={r.size}
+              color="var(--rosette)" opacity={r.op} strokeWidth={1.1} />
+          </ScrollSpin>
+        </div>
+      ))}
+    </>
+  );
+}
+
 /* ── Sakura wind (canvas) ───────────────────────────────────────────────
    Petals drift across the whole viewport and react to scroll: scrolling
    kicks up a gust that pushes them sideways and speeds their fall, then
@@ -554,6 +686,18 @@ function StatsBand({ stats }) {
     <section style={{ position: "relative", overflow: "hidden", background: INK,
       padding: "72px 20px" }}>
       <AmbientGlow subtle />
+      <div aria-hidden="true" style={{ position: "absolute", top: "-30%", left: "-4%",
+        pointerEvents: "none", zIndex: 0 }}>
+        <ScrollSpin speed={20}>
+          <Rosette points={12} skip={5} size={260} color={GOLD} opacity={0.10} />
+        </ScrollSpin>
+      </div>
+      <div aria-hidden="true" style={{ position: "absolute", bottom: "-34%", right: "-3%",
+        pointerEvents: "none", zIndex: 0 }}>
+        <ScrollSpin speed={-24}>
+          <Rosette points={16} skip={7} size={230} color={GOLD} opacity={0.10} />
+        </ScrollSpin>
+      </div>
       <Parallax speed={0.25} float style={{ top: -30, left: -40, opacity: .5 }}>
         <SakuraBranch width={240} opacity={.55} />
       </Parallax>
@@ -801,6 +945,12 @@ function StyleTag() {
         --tint: rgba(75,46,131,.05);
         --tint-2: rgba(75,46,131,.08);
         --lattice: #5b3d8c;
+        --rosette: #5b3d8c;
+        /* Nav + icon accent: purple reads well on light, gold on dark. */
+        --accent: #5b3d8c;
+        --accent-strong: #4a3175;
+        --nav-active-bg: rgba(75,46,131,.09);
+        --nav-idle: #4a4458;
       }
       [data-theme="dark"] {
         --bg: #120e1a;
@@ -819,6 +969,11 @@ function StyleTag() {
         --tint: rgba(201,182,214,.06);
         --tint-2: rgba(201,182,214,.10);
         --lattice: #c9b6d6;
+        --rosette: #d9c79a;
+        --accent: #d9c79a;
+        --accent-strong: #e6d7b0;
+        --nav-active-bg: rgba(201,182,136,.16);
+        --nav-idle: #c3b8db;
       }
       /* Theme swap eases rather than snapping. */
       body, #root, [data-theme] {
@@ -868,7 +1023,7 @@ function StyleTag() {
       .navlink { position: relative; }
       .navlink::after {
         content: ""; position: absolute; left: 50%; right: 50%; bottom: 4px;
-        height: 2px; background: ${GOLD}; border-radius: 2px;
+        height: 2px; background: var(--accent); border-radius: 2px;
         transition: left ${DUR.fast}ms ${EASE.out}, right ${DUR.fast}ms ${EASE.out};
       }
       .navlink:hover::after { left: 14px; right: 14px; }
@@ -1014,20 +1169,20 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
             <span style={{ display: "grid", placeItems: "center",
               transform: dark ? "rotate(0deg)" : "rotate(-90deg) scale(.8)",
               opacity: 1, transition: `transform ${DUR.base}ms ${EASE.spring}` }}>
-              {dark ? <Sun size={16} color={GOLD} /> : <Moon size={16} color={PURPLE} />}
+              {dark ? <Sun size={16} color="var(--accent)" /> : <Moon size={16} color="var(--accent)" />}
             </span>
           </button>
           <button className="btn" onClick={onAdmin} aria-label="Admin login" style={{
             marginLeft: 6, display: "grid", placeItems: "center", width: 38, height: 38,
             borderRadius: 10, border: `1px solid var(--border-strong)`,
             background: "var(--surface)", cursor: "pointer" }}>
-            <Lock size={16} color={PURPLE} />
+            <Lock size={16} color="var(--accent)" />
           </button>
         </div>
 
         <button className="mob" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu"
           style={{ display: "none", background: "none", border: "none", cursor: "pointer" }}>
-          {menuOpen ? <X size={26} color={PURPLE} /> : <Menu size={26} color={PURPLE} />}
+          {menuOpen ? <X size={26} color="var(--accent)" /> : <Menu size={26} color="var(--accent)" />}
         </button>
       </nav>
 
@@ -1059,23 +1214,25 @@ function Nav({ active, onNav, menuOpen, setMenuOpen, onAdmin, dark, onToggleDark
   );
 }
 const navLink = (on) => ({
-  padding: "9px 14px", background: on ? "rgba(75,46,131,.09)" : "transparent",
+  padding: "9px 14px", background: on ? "var(--nav-active-bg)" : "transparent",
   border: "none", cursor: "pointer", borderRadius: 10, fontWeight: 600, fontSize: 14.5,
-  color: on ? PURPLE : "#4a4458", fontFamily: "inherit", textDecoration: "none",
+  color: on ? "var(--accent)" : "var(--nav-idle)",
+  fontFamily: "inherit", textDecoration: "none",
   transition: `background ${DUR.fast}ms ${EASE.out}, color ${DUR.fast}ms ${EASE.out}`,
 });
 const mobLink = {
   display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
   padding: "13px 8px", background: "none", border: "none", borderBottom: "1px solid var(--border)",
-  fontSize: 16, fontWeight: 600, color: PURPLE, cursor: "pointer", fontFamily: "inherit",
-  textDecoration: "none",
+  fontSize: 16, fontWeight: 600, color: "var(--accent)", cursor: "pointer",
+  fontFamily: "inherit", textDecoration: "none",
 };
 
-function Band({ children, id, alt, style, divider, lattice, decor, floats }) {
+function Band({ children, id, alt, style, divider, lattice, decor, floats, rosettes }) {
   return (
     <section id={id} style={{ position: "relative", overflow: "hidden",
       padding: "92px 20px", background: alt ? "var(--surface)" : "transparent", ...style }}>
       {lattice && <StarLatticeBg color="var(--lattice)" opacity={alt ? 0.055 : 0.05} unit={66} />}
+      {rosettes && <EdgeRosettes arrangement={rosettes} />}
       {floats}
       {/* Parallax botanicals framing the section. `decor` picks the arrangement. */}
       {decor === "left" && (
@@ -1157,7 +1314,7 @@ function Eyebrow({ children }) {
 function Title({ children, delay = 0 }) {
   const isText = typeof children === "string";
   return (
-    <h2 style={{ fontSize: "clamp(28px,4vw,42px)", fontWeight: 800, color: PURPLE,
+    <h2 style={{ fontSize: "clamp(28px,4vw,42px)", fontWeight: 800, color: "var(--accent)",
       margin: "0 0 16px", letterSpacing: "-1px", lineHeight: 1.1 }}>
       {isText
         ? <TextReveal text={children} delay={delay + 90} step={48} />
@@ -1185,6 +1342,14 @@ function HomeSection({ data, onNav }) {
         color: "#fff", padding: "104px 20px 0" }}>
         <AmbientGlow />
         <PatternField />
+        {/* large medallion behind the hero content, turning with scroll */}
+        <div aria-hidden="true" style={{ position: "absolute", top: "8%", left: "50%",
+          marginLeft: -260, pointerEvents: "none", zIndex: 0 }}>
+          <ScrollSpin speed={14}>
+            <Rosette points={16} skip={7} size={520} color={GOLD}
+              opacity={0.11} strokeWidth={1} />
+          </ScrollSpin>
+        </div>
         <HangingLanterns />
         {/* central mihrab arch silhouette — strokes draw themselves in */}
         <HeroArch />
@@ -1228,9 +1393,9 @@ function HomeSection({ data, onNav }) {
       </section>
 
       {/* Gallery */}
-      <Band id="gallery" lattice decor="left" floats={<>
+      <Band id="gallery" lattice decor="left" rosettes="left" floats={<>
         <Parallax speed={.12} float style={{ top: 20, right: "8%" }}>
-          <Star8 size={64} color={PURPLE} opacity={.10} /></Parallax>
+          <Star8 size={64} color="var(--rosette)" opacity={.10} /></Parallax>
         <Parallax speed={-.08} float style={{ bottom: 40, left: "4%" }}>
           <Star8 size={38} color={GOLD} opacity={.16} /></Parallax>
       </>}>
@@ -1241,7 +1406,7 @@ function HomeSection({ data, onNav }) {
       </Band>
 
       {/* Sponsors */}
-      <Band alt>
+      <Band alt rosettes="wide">
         <Eyebrow>With support from</Eyebrow>
         <Title>Our sponsors & partners</Title>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))",
@@ -1251,7 +1416,7 @@ function HomeSection({ data, onNav }) {
               <img src={s.logo} alt={s.name} className="sponsorlogo"
                 style={{ maxHeight: 60, maxWidth: "100%", objectFit: "contain" }} />
             ) : (
-              <span style={{ fontWeight: 700, color: PURPLE, fontSize: 15 }}>{s.name}</span>
+              <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: 15 }}>{s.name}</span>
             );
             const boxStyle = { ...card, display: "grid", placeItems: "center",
               height: 96, textAlign: "center", padding: 16, textDecoration: "none" };
@@ -1273,10 +1438,10 @@ function HomeSection({ data, onNav }) {
             position: "relative", overflow: "hidden",
             background: `linear-gradient(120deg, rgba(75,46,131,.05), rgba(183,165,122,.08))` }}>
             <div aria-hidden="true" style={{ position: "absolute", right: -30, top: -40, opacity: .07 }}>
-              <Star8 size={190} color={PURPLE} />
+              <Star8 size={190} color="var(--rosette)" />
             </div>
             <div style={{ position: "relative" }}>
-              <h3 style={{ margin: "0 0 6px", color: PURPLE, fontSize: 21, fontWeight: 700 }}>
+              <h3 style={{ margin: "0 0 6px", color: "var(--accent)", fontSize: 21, fontWeight: 700 }}>
                 Support the MSA</h3>
               <p style={{ margin: 0, color: "var(--text-muted)" }}>Your donation funds events, iftars, and student programs.</p>
             </div>
@@ -1697,7 +1862,7 @@ function MasjidalWidget({ id, embed }) {
 function PrayerSection({ data }) {
   const t = data.prayerTimes;
   return (
-    <Band id="prayer" alt lattice>
+    <Band id="prayer" alt lattice rosettes="right">
       <Eyebrow>Prayer</Eyebrow>
       <Title>Places & times to pray</Title>
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 24, marginTop: 32,
@@ -1712,10 +1877,10 @@ function PrayerSection({ data }) {
                   <Arch w={46} h={56} spring={34} stroke="none" fill="rgba(75,46,131,.08)"
                     style={{ width: "100%", height: "100%" }} />
                 </div>
-                <MapPin size={20} color={PURPLE} style={{ position: "relative", marginTop: 6 }} />
+                <MapPin size={20} color="var(--accent)" style={{ position: "relative", marginTop: 6 }} />
               </div>
               <div>
-                <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700, color: PURPLE }}>{s.name}</h3>
+                <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>{s.name}</h3>
                 <div style={{ color: "var(--text-muted)", fontSize: 14.5, marginBottom: 6 }}>{s.loc}</div>
                 <div style={{ color: "var(--text-faint)", fontSize: 13.5 }}>{s.note}</div>
               </div>
@@ -1747,7 +1912,7 @@ function PrayerSection({ data }) {
                 <div key={p} style={{ display: "flex", justifyContent: "space-between",
                   alignItems: "center", padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
                   <span style={{ fontWeight: 600, color: "var(--text)" }}>{p}</span>
-                  <span style={{ fontFamily: "'Amiri',serif", fontSize: 18, color: PURPLE, fontWeight: 700 }}>{t[p]}</span>
+                  <span style={{ fontFamily: "'Amiri',serif", fontSize: 18, color: "var(--accent)", fontWeight: 700 }}>{t[p]}</span>
                 </div>
               ))}
             </div>
@@ -1756,7 +1921,7 @@ function PrayerSection({ data }) {
           <div style={{ padding: "16px 24px", background: "rgba(183,165,122,.1)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
               <Calendar size={16} color={GOLD} />
-              <span style={{ fontWeight: 700, fontSize: 13.5, color: PURPLE }}>Jummah</span>
+              <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--accent)" }}>Jummah</span>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--text-muted)" }}>{t.jummah}</div>
           </div>
@@ -1764,7 +1929,7 @@ function PrayerSection({ data }) {
             <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <Sparkles size={16} color={GOLD} />
-                <span style={{ fontWeight: 700, fontSize: 13.5, color: PURPLE }}>Announcement</span>
+                <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--accent)" }}>Announcement</span>
               </div>
               <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.55 }}>{t.announcement}</div>
             </div>
@@ -1780,7 +1945,7 @@ function PrayerSection({ data }) {
 /* ---------- EVENTS ---------- */
 function EventsSection({ data }) {
   return (
-    <Band id="events" divider lattice decor="both">
+    <Band id="events" divider lattice decor="both" rosettes="both">
       <Eyebrow>This week</Eyebrow>
       <Title>Weekly calendar</Title>
       <Lead>Everything happening across the week — drop in anytime.</Lead>
@@ -1794,7 +1959,7 @@ function EventsSection({ data }) {
               border: isFri ? `2px solid ${GOLD}` : card.border }}>
               <div style={{ padding: "12px 18px", background: isFri ? "rgba(183,165,122,.15)" : "var(--tint)",
                 display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontWeight: 700, color: PURPLE, fontSize: 15 }}>{day}</span>
+                <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: 15 }}>{day}</span>
                 {isFri && <Star8 size={15} />}
               </div>
               <div style={{ padding: 14, display: "grid", gap: 10, minHeight: 90 }}>
@@ -1809,7 +1974,7 @@ function EventsSection({ data }) {
                       style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />}
                     <div style={{ padding: "12px 14px" }}>
                     <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 14.5, marginBottom: 5 }}>{e.name}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5, color: PURPLE,
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--accent)",
                       fontSize: 12.5, fontWeight: 600, marginBottom: 3 }}>
                       <Clock size={12} /> {e.time}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--text-faint)", fontSize: 12.5 }}>
@@ -1831,7 +1996,7 @@ function EventsSection({ data }) {
 /* ---------- PROGRAMS ---------- */
 function ProgramsSection({ data }) {
   return (
-    <Band id="programs" alt divider lattice decor="right">
+    <Band id="programs" alt divider lattice decor="right" rosettes="left">
       <Eyebrow>Get involved</Eyebrow>
       <Title>Our programs</Title>
       <Lead>Ways to grow, give back, and connect throughout the year.</Lead>
@@ -1866,7 +2031,7 @@ function ProgramCard({ program: p }) {
           transform: hover ? "translate3d(0,-3px,0)" : "none",
           transition: `transform ${DUR.base}ms ${EASE.spring}` }}>{progIcon(p.icon)}</div>
       </div>
-      <h3 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 700, color: PURPLE }}>{p.name}</h3>
+      <h3 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 700, color: "var(--accent)" }}>{p.name}</h3>
       <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 14.5, lineHeight: 1.6 }}>{p.desc}</p>
     </div>
   );
@@ -1879,7 +2044,7 @@ function ConnectSection({ data }) {
     facebook: "#1877F2", donate: `linear-gradient(135deg,${PURPLE},${GOLD})`, link: PURPLE,
   }[k] || PURPLE);
   return (
-    <Band id="connect" lattice decor="left">
+    <Band id="connect" lattice decor="left" rosettes="wide">
       <Eyebrow>Connect</Eyebrow>
       <Title>Find your people</Title>
       <Lead>Join the group chats, follow along, and support the community.</Lead>
@@ -1911,7 +2076,7 @@ function LinkCard({ link: l, bg }) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 16 }}>{l.name}</div>
-        <div style={{ color: PURPLE, fontSize: 13, fontWeight: 600, display: "flex",
+        <div style={{ color: "var(--accent)", fontSize: 13, fontWeight: 600, display: "flex",
           alignItems: "center", gap: 4, marginTop: 2 }}>
           Open
           <span style={{ display: "inline-flex",
@@ -2155,7 +2320,7 @@ function Editor({ tab, data, setData }) {
           <div key={day} style={{ marginBottom: 20, border: "1px solid var(--border)",
             borderRadius: 12, overflow: "hidden" }}>
             <div style={{ padding: "10px 14px", background: "var(--tint)", fontWeight: 700,
-              color: PURPLE, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              color: "var(--accent)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               {day}
               <button onClick={() => setDay(day, [...(data.events[day] || []),
                 { id: Date.now(), name: "New event", time: "", loc: "", desc: "", img: "" }])}
@@ -2219,7 +2384,7 @@ function Editor({ tab, data, setData }) {
 function Section({ title, children }) {
   return (
     <div>
-      <h3 style={{ margin: "0 0 18px", color: PURPLE, fontSize: 19, fontWeight: 700 }}>{title}</h3>
+      <h3 style={{ margin: "0 0 18px", color: "var(--accent)", fontSize: 19, fontWeight: 700 }}>{title}</h3>
       {children}
     </div>
   );
